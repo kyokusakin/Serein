@@ -5053,12 +5053,16 @@ sound-unmute = ミュート解除
 sound-deafen = スピーカーミュート
 sound-undeafen = スピーカーミュート解除
 sound-camera-on = カメラオン
+sound-camera-off = カメラオフ
+sound-disconnect = ボイス切断
 sound-ptt-start = プッシュトゥトーク開始
 sound-ptt-stop = プッシュトゥトーク終了
 sound-user-join = ユーザー参加
 sound-user-leave = ユーザー退出
+sound-user-moved = ユーザー移動
 sound-stream-started = 配信開始
 sound-viewer-join = 視聴者参加
+sound-viewer-leave = 視聴者退出
 
 ## Voice member menu
 voice-member-note-hint = あなただけに表示されます

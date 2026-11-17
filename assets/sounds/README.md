@@ -25,8 +25,12 @@ from the source sample rate; no re-encoding, metadata stripping or trimming is a
 | `viewer-join.mp3` | [stream_user_joined](https://discord.com/assets/3d2af2764581bb2e.mp3), downloaded October 19, 2026 | `3b51208e7559fc5b16a297cd8d882648fa7534adf706dfbd529c39266d132213` |
 | `ptt-start.mp3` | [ptt_start](https://discord.com/assets/f5c8ec31889c5317.mp3), downloaded October 29, 2026 | `9a06714cbc4fffe5c181be5499d08a3de31bcd21bfd0678c1a42764c0db4c99a` |
 | `ptt-stop.mp3` | [ptt_stop](https://discord.com/assets/34b5969be3a063ba.mp3), downloaded October 29, 2026 | `e470a8a450681b6ef92251c974fc295b598445faf1749697765a9b293f50c0e7` |
+| `camera-off.mp3` | [camera_off](https://discord.com/assets/b1dd204729fe78b4.mp3), downloaded November 18, 2026 | `fe81a2ab7b0581736108c5fc79ab7884ab2e5211a50b69f56badde08d41e7bfb` |
+| `disconnect.mp3` | [disconnect](https://discord.com/assets/dd0911025fe00b2e.mp3), downloaded November 18, 2026 | `c06c7e58099969eacc5f8eb925fb381f445250b9f37acf959b11df72aabb44ca` |
+| `user-moved.mp3` | [user_moved](https://discord.com/assets/4003230e4086b680.mp3), downloaded November 18, 2026 | `af782dabdba6ff3b9c90b0be29274cf964167e6d6125db1e4c9e235bee8eed51` |
+| `viewer-leave.mp3` | [stream_user_left](https://discord.com/assets/24ae9dc0184bd570.mp3), downloaded November 18, 2026 | `be2f1374b1ec8137eaa7e11357aafe12a3f3e09c0ed759b5d11043e723992061` |
 
-The sixteen files total 734,265 bytes; each distinct cue is bundled independently. No network fetch or user-file access occurs during playback.
+The twenty files total 987,897 bytes; each distinct cue is bundled independently. No network fetch or user-file access occurs during playback.
 Incoming and outgoing rings repeat every six and three seconds respectively,
 leaving enough time for each complete clip before its next playback.
 

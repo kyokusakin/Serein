@@ -57,6 +57,16 @@ impl MessagingUi {
 			);
 			let more = vec![
 				("sound-camera-on", &mut options.camera_on, Sound::CameraOn),
+				(
+					"sound-camera-off",
+					&mut options.camera_off,
+					Sound::CameraOff,
+				),
+				(
+					"sound-disconnect",
+					&mut options.disconnect,
+					Sound::Disconnect,
+				),
 				("sound-ptt-start", &mut options.ptt_start, Sound::PttStart),
 				("sound-ptt-stop", &mut options.ptt_stop, Sound::PttStop),
 				("sound-user-join", &mut options.user_join, Sound::UserJoin),
@@ -64,6 +74,11 @@ impl MessagingUi {
 					"sound-user-leave",
 					&mut options.user_leave,
 					Sound::UserLeave,
+				),
+				(
+					"sound-user-moved",
+					&mut options.user_moved,
+					Sound::UserMoved,
 				),
 				(
 					"sound-outgoing-ring",
@@ -79,6 +94,11 @@ impl MessagingUi {
 					"sound-viewer-join",
 					&mut options.viewer_join,
 					Sound::ViewerJoin,
+				),
+				(
+					"sound-viewer-leave",
+					&mut options.viewer_leave,
+					Sound::ViewerLeave,
 				),
 			];
 			design::card_divider(ui);

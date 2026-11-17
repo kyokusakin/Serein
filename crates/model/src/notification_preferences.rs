@@ -13,15 +13,22 @@ pub struct Device {
 	pub deafen: bool,
 	pub undeafen: bool,
 	pub camera_on: bool,
+	pub camera_off: bool,
 	pub screen_share_on: bool,
 	pub user_join: bool,
 	pub user_leave: bool,
+	/// Someone moved this account to another voice channel.
+	pub user_moved: bool,
+	/// This device's own call ended or dropped.
+	pub disconnect: bool,
 	/// Push-to-talk key pressed (transmission started).
 	pub ptt_start: bool,
 	/// Push-to-talk key released (transmission ended).
 	pub ptt_stop: bool,
 	/// Someone started watching this device's own screen share.
 	pub viewer_join: bool,
+	/// Someone stopped watching this device's own screen share.
+	pub viewer_leave: bool,
 	pub volume: u8,
 }
 impl Default for Device {
@@ -38,12 +45,16 @@ impl Default for Device {
 			deafen: true,
 			undeafen: true,
 			camera_on: true,
+			camera_off: true,
 			screen_share_on: true,
 			user_join: true,
 			user_leave: true,
+			user_moved: true,
+			disconnect: true,
 			ptt_start: true,
 			ptt_stop: true,
 			viewer_join: true,
+			viewer_leave: true,
 			volume: 75,
 		}
 	}
@@ -59,14 +70,18 @@ pub enum Sound {
 	Deafen,
 	Undeafen,
 	CameraOn,
+	CameraOff,
 	ScreenShareOn,
 	/// This device's own share stopped. The screen-share cue switch covers both edges.
 	ScreenShareOff,
 	UserJoin,
 	UserLeave,
+	UserMoved,
+	Disconnect,
 	PttStart,
 	PttStop,
 	ViewerJoin,
+	ViewerLeave,
 }
 impl Device {
 	pub fn allows(self, sound: Sound) -> bool {
@@ -82,12 +97,16 @@ impl Device {
 				Sound::Deafen => self.deafen,
 				Sound::Undeafen => self.undeafen,
 				Sound::CameraOn => self.camera_on,
+				Sound::CameraOff => self.camera_off,
 				Sound::ScreenShareOn | Sound::ScreenShareOff => self.screen_share_on,
 				Sound::UserJoin => self.user_join,
 				Sound::UserLeave => self.user_leave,
+				Sound::UserMoved => self.user_moved,
+				Sound::Disconnect => self.disconnect,
 				Sound::PttStart => self.ptt_start,
 				Sound::PttStop => self.ptt_stop,
 				Sound::ViewerJoin => self.viewer_join,
+				Sound::ViewerLeave => self.viewer_leave,
 			}
 	}
 }

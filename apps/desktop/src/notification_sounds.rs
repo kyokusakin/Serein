@@ -148,6 +148,7 @@ fn samples(clip: Clip, rate: u32, current: &impl Fn() -> bool) -> Result<Vec<[f3
 		Sound::Deafen => include_bytes!("../../../assets/sounds/discord/deafen.mp3"),
 		Sound::Undeafen => include_bytes!("../../../assets/sounds/discord/undeafen.mp3"),
 		Sound::CameraOn => include_bytes!("../../../assets/sounds/discord/camera-on.mp3"),
+		Sound::CameraOff => include_bytes!("../../../assets/sounds/discord/camera-off.mp3"),
 		Sound::ScreenShareOn => {
 			include_bytes!("../../../assets/sounds/discord/screen-share-on.mp3")
 		}
@@ -156,9 +157,12 @@ fn samples(clip: Clip, rate: u32, current: &impl Fn() -> bool) -> Result<Vec<[f3
 		}
 		Sound::UserJoin => include_bytes!("../../../assets/sounds/discord/user-join.mp3"),
 		Sound::UserLeave => include_bytes!("../../../assets/sounds/discord/user-leave.mp3"),
+		Sound::UserMoved => include_bytes!("../../../assets/sounds/discord/user-moved.mp3"),
+		Sound::Disconnect => include_bytes!("../../../assets/sounds/discord/disconnect.mp3"),
 		Sound::PttStart => include_bytes!("../../../assets/sounds/discord/ptt-start.mp3"),
 		Sound::PttStop => include_bytes!("../../../assets/sounds/discord/ptt-stop.mp3"),
 		Sound::ViewerJoin => include_bytes!("../../../assets/sounds/discord/viewer-join.mp3"),
+		Sound::ViewerLeave => include_bytes!("../../../assets/sounds/discord/viewer-leave.mp3"),
 	};
 	if bytes.len() > 128 * 1024 || !(8000..=192000).contains(&rate) {
 		return Err(());
@@ -472,6 +476,10 @@ mod tests {
 				Sound::PttStart,
 				Sound::PttStop,
 				Sound::ViewerJoin,
+				Sound::CameraOff,
+				Sound::UserMoved,
+				Sound::Disconnect,
+				Sound::ViewerLeave,
 			]
 			.map(|s| samples(Clip::Cue(s), rate, &|| true).unwrap());
 			assert_ne!(cues[0], cues[1]);
@@ -479,6 +487,8 @@ mod tests {
 			assert_ne!(cues[5], cues[6]);
 			assert_ne!(cues[8], cues[9]);
 			assert_ne!(cues[13], cues[14]);
+			assert_ne!(cues[7], cues[16]);
+			assert_ne!(cues[15], cues[19]);
 			let expectations = [
 				(0.2, 0.5),
 				(0.5, 0.9),
@@ -495,6 +505,10 @@ mod tests {
 				(0.9, 1.1),
 				(0.02, 0.25),
 				(0.02, 0.25),
+				(1.5, 1.8),
+				(1.95, 2.2),
+				(1.25, 1.5),
+				(1.1, 1.35),
 				(1.5, 1.8),
 			];
 			assert!(

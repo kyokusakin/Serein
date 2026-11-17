@@ -5278,12 +5278,16 @@ sound-unmute = 마이크 켜기
 sound-deafen = 헤드셋 끄기
 sound-undeafen = 헤드셋 켜기
 sound-camera-on = 카메라 켜기
+sound-camera-off = 카메라 끄기
+sound-disconnect = 음성 연결 끊김
 sound-ptt-start = 눌러서 말하기 시작
 sound-ptt-stop = 눌러서 말하기 종료
 sound-user-join = 사용자 참여
 sound-user-leave = 사용자 나감
+sound-user-moved = 사용자 이동됨
 sound-stream-started = 방송 시작
 sound-viewer-join = 시청자 참여
+sound-viewer-leave = 시청자 나감
 
 ## Voice member menu
 voice-member-note-hint = 나만 볼 수 있어요

@@ -108,7 +108,7 @@ pub(super) struct Screen {
 	toast: Option<(ui::design::Level, Cow<'static, str>)>,
 	/// Last viewer count Discord reported for the own stream, and a cue waiting for `poll`.
 	viewers: Option<(Context, u16)>,
-	viewer_cue: bool,
+	viewer_cue: Option<model::notification_preferences::Sound>,
 	share_cued: bool,
 	thumbnail: Thumbnail,
 }
@@ -127,7 +127,7 @@ impl Screen {
 		self.command = None;
 		self.closing = None;
 		self.viewers = None;
-		self.viewer_cue = false;
+		self.viewer_cue = None;
 		// Keep one in-flight OS enumeration tracked until it completes.
 		self.retire_live();
 		self.status = "Screen sharing stopped".into();
@@ -259,12 +259,19 @@ impl Screen {
 			}
 			screen::Event::Failed(message) => self.fail(*message),
 			screen::Event::Viewers(count) => {
-				// As in Discord: chime when this stream gains a viewer while it had at most 25.
+				// As in Discord: chime when this stream gains or loses a viewer while it had at
+				// most 25.
 				let previous = self
 					.viewers
 					.filter(|(context, _)| *context == incoming)
 					.map_or(0, |(_, count)| count);
-				self.viewer_cue |= self.live.is_some() && *count > previous && previous <= 25;
+				if self.live.is_some() && previous <= 25 && *count != previous {
+					self.viewer_cue = Some(if *count > previous {
+						model::notification_preferences::Sound::ViewerJoin
+					} else {
+						model::notification_preferences::Sound::ViewerLeave
+					});
+				}
 				self.viewers = Some((incoming, *count));
 			}
 		}
@@ -300,8 +307,9 @@ impl Screen {
 			return None;
 		}
 		ui.screen.supported = discord_voice::screen::supported();
-		let cue = model::notification_preferences::Sound::ViewerJoin;
-		if std::mem::take(&mut self.viewer_cue) && ui.sound_options().allows(cue) {
+		if let Some(cue) = self.viewer_cue.take()
+			&& ui.sound_options().allows(cue)
+		{
 			ui.notification_preview = Some(cue);
 			ctx.request_repaint();
 		}

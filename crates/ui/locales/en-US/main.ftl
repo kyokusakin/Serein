@@ -5317,12 +5317,16 @@ sound-unmute = Unmute
 sound-deafen = Deafen
 sound-undeafen = Undeafen
 sound-camera-on = Camera On
+sound-camera-off = Camera Off
+sound-disconnect = Voice Disconnected
 sound-ptt-start = PTT Activate
 sound-ptt-stop = PTT Deactivate
 sound-user-join = User Join
 sound-user-leave = User Leave
+sound-user-moved = User Moved
 sound-stream-started = Stream Started
 sound-viewer-join = Viewer Join
+sound-viewer-leave = Viewer Leave
 
 ## Voice member menu
 voice-member-note-hint = Only visible to you

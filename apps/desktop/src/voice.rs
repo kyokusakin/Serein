@@ -383,6 +383,8 @@ pub struct Voice {
 	remote_textures: Vec<(Id, crate::gpu_video::VideoTexture)>,
 	/// A joined call failed; the next poll plays the leave cue a hangup would.
 	leave_cue: bool,
+	/// Discord moved this session to another channel; the next poll plays the move cue.
+	moved_cue: bool,
 	rejoin: Option<Rejoin>,
 	/// Media dropped and a rejoin is scheduled: the main gateway may have died with it, so the
 	/// app should confirm that socket before the rejoin depends on it.
@@ -543,6 +545,7 @@ impl Voice {
 				if let Some(negotiation) = &mut live.negotiation {
 					negotiation.channel = *channel;
 				}
+				self.moved_cue = true;
 			} else if let Some(pending) = self.pending.as_mut().filter(|pending| {
 				(pending.generation, pending.channel, pending.request)
 					== (state.generation, *from, *request)
@@ -554,6 +557,7 @@ impl Voice {
 				pending.negotiation_revision = None;
 				pending.failed_candidate = false;
 				pending.started = Instant::now();
+				self.moved_cue = true;
 			}
 			return None;
 		}
@@ -983,8 +987,12 @@ impl Voice {
 		if !state.demo {
 			ui.voice_latency = ui::VoiceLatency::default();
 		}
-		if std::mem::take(&mut self.leave_cue) && ui.sound_options().allows(Sound::UserLeave) {
-			ui.notification_preview = Some(Sound::UserLeave);
+		if std::mem::take(&mut self.leave_cue) && ui.sound_options().allows(Sound::Disconnect) {
+			ui.notification_preview = Some(Sound::Disconnect);
+			ctx.request_repaint();
+		}
+		if std::mem::take(&mut self.moved_cue) && ui.sound_options().allows(Sound::UserMoved) {
+			ui.notification_preview = Some(Sound::UserMoved);
 			ctx.request_repaint();
 		}
 		if let Some(command) = self.poll_rejoin(state, ui, ctx) {
@@ -1079,9 +1087,9 @@ impl Voice {
 				.live
 				.as_ref()
 				.is_some_and(|live| live.cues.joined && live.generation == state.generation)
-				&& ui.sound_options().allows(Sound::UserLeave)
+				&& ui.sound_options().allows(Sound::Disconnect)
 			{
-				ui.notification_preview = Some(Sound::UserLeave);
+				ui.notification_preview = Some(Sound::Disconnect);
 				ctx.request_repaint();
 			}
 			let command = current.map(|(_, channel, request)| self.end_control(channel, request));

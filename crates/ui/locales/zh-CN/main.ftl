@@ -5167,12 +5167,16 @@ sound-unmute = 取消静音
 sound-deafen = 关闭声音
 sound-undeafen = 开启声音
 sound-camera-on = 开启摄像头
+sound-camera-off = 关闭摄像头
+sound-disconnect = 语音已断开连接
 sound-ptt-start = 按键说话开启
 sound-ptt-stop = 按键说话关闭
 sound-user-join = 用户加入
 sound-user-leave = 用户离开
+sound-user-moved = 用户已移动
 sound-stream-started = 直播已开始
 sound-viewer-join = 观众加入
+sound-viewer-leave = 观众离开
 
 ## Voice member menu
 voice-member-note-hint = 仅您可见

@@ -4131,6 +4131,10 @@ impl Desktop {
 			) {
 				self.voice.stop_camera();
 				self.messaging.voice_camera_preview = None;
+				let cue = model::notification_preferences::Sound::CameraOff;
+				if self.messaging.sound_options().allows(cue) {
+					self.messaging.notification_preview = Some(cue);
+				}
 			}
 			if matches!(control, client_core::voice::Command::Leave { .. }) {
 				self.voice.hang_up(&self.state);

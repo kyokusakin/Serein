@@ -42,6 +42,11 @@ switches for at most 64 members each. Your own server nickname is changed throug
 `PATCH /guilds/{guild}/members/@me` with `CHANGE_NICKNAME`; another member's uses
 `PATCH /guilds/{guild}/members/{user}` with `MANAGE_NICKNAMES`.
 
+Voice cues follow the triggers in Discord's web client bundle (unofficial, not checked against
+the live client): leaving or losing your own call plays `disconnect` rather than `user_leave`,
+turning the camera off plays `camera_off`, being moved by someone else plays `user_moved`, and a
+viewer leaving your stream plays `stream_user_left`. Each has its own switch, on by default.
+
 ## Game mentions (October 14, 2026)
 
 The native composer offers `@game`, a searchable game catalog and application references
@@ -1163,7 +1168,7 @@ pacing and teardown; native output selection, sound quality, echo and live inter
 remain unverified. Linux adds the native `libpulse-sys 1.23.0` bindings; no new Flatpak
 permission, virtual device, output rerouting or recording file is added.
 
-Gateway opcodes 18/19 and STREAM_CREATE/STREAM_SERVER_UPDATE/STREAM_DELETE are unofficial normal-user behavior, checked against [discord.py-self](https://github.com/dolfies/discord.py-self/blob/master/discord/gateway.py). STREAM_UPDATE `viewer_ids` for the own stream is likewise unofficial (seen in Discord's web client bundle) and unverified against live service; only its length is kept, to play the viewer-join cue when the count rises from 25 or fewer, as Discord's client does. A separate RTC connection uses the stream RTC server/channel IDs and the parent call session, sharing one ephemeral DAVE signing identity. The `rtc_server_id - 1` MLS group mapping comes from [discord-native-voice](https://github.com/dolfies/discord-native-voice/blob/master/discord/ext/native_voice/stream_client.py); it is not an official protocol guarantee. H264 negotiation and UDP transport are required; mismatches fail visibly. Video is DAVE-encrypted before RFC 6184 packetization and per-packet transport AEAD. There is no plaintext fallback. [DAVE protocol](https://github.com/discord/dave-protocol/blob/main/protocol.md) supplies the encryption requirement.
+Gateway opcodes 18/19 and STREAM_CREATE/STREAM_SERVER_UPDATE/STREAM_DELETE are unofficial normal-user behavior, checked against [discord.py-self](https://github.com/dolfies/discord.py-self/blob/master/discord/gateway.py). STREAM_UPDATE `viewer_ids` for the own stream is likewise unofficial (seen in Discord's web client bundle) and unverified against live service; only its length is kept, to play the viewer-join or viewer-leave cue when the count rises or falls from 25 or fewer, as Discord's client does. A separate RTC connection uses the stream RTC server/channel IDs and the parent call session, sharing one ephemeral DAVE signing identity. The `rtc_server_id - 1` MLS group mapping comes from [discord-native-voice](https://github.com/dolfies/discord-native-voice/blob/master/discord/ext/native_voice/stream_client.py); it is not an official protocol guarantee. H264 negotiation and UDP transport are required; mismatches fail visibly. Video is DAVE-encrypted before RFC 6184 packetization and per-packet transport AEAD. There is no plaintext fallback. [DAVE protocol](https://github.com/discord/dave-protocol/blob/main/protocol.md) supplies the encryption requirement.
 
 Screen source discovery and capture occur off the UI/audio threads. Application-owned source lists are capped at 64 labels of 256 bytes. Raw BGRA frames are capped at 3840×2160/33,177,600 bytes; macOS requests the selected output dimensions. Windows prechecks source size and stops on oversized callback frames, but its upstream driver adapter can resize its native GPU pool before that callback. One raw frame and three encoded frames can be queued; H264 frames are capped at 2 MiB, encrypted packetization at 2,048 fragments of at most 1,200 transport bytes. Quality presets target 4–16 Mbps, with frame dropping under load. They are limits/targets, not measured delivery guarantees.
 
