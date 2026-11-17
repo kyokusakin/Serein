@@ -9999,8 +9999,9 @@ mod composer_tests {
 		// Session-wide refusals disable Join too, with the reason the call buttons give.
 		view.voice_available = false;
 		assert_eq!(
-			agree(&view, &state).as_deref(),
+			agree(&view, &state),
 			view.calls_unavailable(&state)
+				.map(crate::i18n::translate_if_key)
 		);
 		view.voice_available = true;
 		let mut commands = vec![];

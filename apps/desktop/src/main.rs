@@ -2337,7 +2337,7 @@ impl Desktop {
 					.load_texture("synthetic-stream", image, egui::TextureOptions::LINEAR);
 			messaging.voice_stream_view = Some(egui::load::SizedTexture::from_handle(&texture));
 			demo_textures.push(texture);
-			messaging.voice_stream_status = "Watching the stream";
+			messaging.voice_stream_status = "call-status-stream-watching";
 			// `--demo-focus` additionally opens the enlarged stage layout.
 			if std::env::args().any(|arg| arg == "--demo-focus") {
 				messaging.voice_focus = Some(ui::StageFocus::Stream(peer));

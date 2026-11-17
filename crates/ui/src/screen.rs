@@ -116,10 +116,10 @@ impl ScreenUi {
 				]
 			};
 			self.selected = self.sources.first().map(|source| source.id);
-			self.status = "Offline preview · no screen is captured".into();
+			self.status = "call-status-screen-offline-preview".into();
 		} else {
 			self.refresh_requested = true;
-			self.status = "Looking for screens and windows…".into();
+			self.status = "call-status-screen-scanning".into();
 		}
 	}
 	fn selected_source(&self) -> Option<&Source> {
@@ -277,7 +277,7 @@ impl ScreenUi {
 					self.quality_for = None;
 					self.sources.clear();
 					self.refresh_requested = true;
-					self.status = "Looking for screens and windows…".into();
+					self.status = "call-status-screen-scanning".into();
 				}
 			});
 		});
@@ -376,7 +376,7 @@ impl ScreenUi {
 					ui.set_width(ui.available_width());
 					ui.add(
 						egui::Label::new(
-							egui::RichText::new(&*self.status)
+							egui::RichText::new(crate::i18n::translate_if_key(&self.status))
 								.size(12.0)
 								.color(colors.muted),
 						)

@@ -206,7 +206,7 @@ impl Watch {
 						(None, Some(_)) => {
 							self.ended = Some((
 								ui::design::Level::Warning,
-								"Discord omitted the stream connection token",
+								"call-status-stream-token-missing",
 							));
 						}
 					}
@@ -215,7 +215,7 @@ impl Watch {
 			screen::Event::Deleted { reason } => {
 				self.ended = Some((
 					ui::design::Level::Info,
-					reason.unwrap_or("The stream ended"),
+					reason.unwrap_or("call-status-stream-ended"),
 				));
 			}
 			screen::Event::Failed(message) => {
@@ -255,7 +255,7 @@ impl Watch {
 						context.streamer,
 					))) {
 			self.stop();
-			self.status = "Stopped watching";
+			self.status = "call-status-stream-stopped";
 			if context.generation == state.generation && !state.demo {
 				command = Some(Command::Voice(voice::Command::StopWatching {
 					channel: context.channel,
@@ -285,7 +285,7 @@ impl Watch {
 		}
 		if state.demo {
 			ui.voice_stream_status = if wanted.is_some() {
-				"Offline preview · no stream is received"
+				"call-status-stream-offline-preview"
 			} else {
 				""
 			};
@@ -298,7 +298,7 @@ impl Watch {
 			let Some(call) = call.filter(|call| {
 				call.generation == generation && call.channel == channel && call.request == request
 			}) else {
-				ui.voice_stream_status = "Connect the call before watching a stream";
+				ui.voice_stream_status = "call-status-stream-needs-call";
 				return None;
 			};
 			self.sequence = self.sequence.wrapping_add(1);
@@ -320,7 +320,7 @@ impl Watch {
 				server: None,
 				started: Instant::now(),
 			});
-			self.status = "Requesting the stream…";
+			self.status = "call-status-stream-requesting";
 			command = Some(Command::Voice(voice::Command::WatchStream {
 				channel,
 				request,
@@ -330,10 +330,7 @@ impl Watch {
 		}
 		if let Some(pending) = &self.pending {
 			if pending.started.elapsed() >= SIGNAL_TIMEOUT {
-				self.ended = Some((
-					ui::design::Level::Warning,
-					"Discord did not provide the stream connection; try again",
-				));
+				self.ended = Some((ui::design::Level::Warning, "call-status-stream-timeout"));
 				ctx.request_repaint();
 			} else {
 				ctx.request_repaint_after(SIGNAL_TIMEOUT.saturating_sub(pending.started.elapsed()));
@@ -358,7 +355,10 @@ impl Watch {
 				None => {}
 			}
 			if live.task.is_finished() && self.ended.is_none() {
-				self.ended = Some((ui::design::Level::Warning, "The stream connection ended"));
+				self.ended = Some((
+					ui::design::Level::Warning,
+					"call-status-stream-connection-ended",
+				));
 			}
 			// Uploading copies the planes into GPU staging, so it runs under the slot lock
 			// and the decoder keeps refilling the same allocation.
@@ -372,7 +372,7 @@ impl Watch {
 						self.texture.upload(ctx, "remote-stream", picture.borrow())
 				{
 					ui.voice_stream_view = Some(texture);
-					self.status = "Watching the stream";
+					self.status = "call-status-stream-watching";
 				}
 			}
 		} else {
@@ -423,11 +423,11 @@ impl Watch {
 			let result =
 				discord_voice::watch_stream(credentials, identity, sink, audio, move |event| {
 					let status = match event {
-						Status::Connecting => "Connecting to the stream…",
-						Status::Discovering => "Checking the stream network…",
-						Status::TransportReady | Status::Securing => "Securing the stream…",
-						Status::WaitingForPeer => "Waiting for the streamer…",
-						Status::Ready { .. } => "Stream secured · waiting for video",
+						Status::Connecting => "call-status-stream-connecting",
+						Status::Discovering => "call-status-stream-checking-network",
+						Status::TransportReady | Status::Securing => "call-status-stream-securing",
+						Status::WaitingForPeer => "call-status-stream-waiting",
+						Status::Ready { .. } => "call-status-stream-secured",
 						Status::RemoteAudio
 						| Status::Speaking(_)
 						| Status::CameraAvailable(_)
@@ -446,7 +446,7 @@ impl Watch {
 			}
 			wake.request_repaint();
 		});
-		self.status = "Connecting to the stream…";
+		self.status = "call-status-stream-connecting";
 		self.live = Some(Live {
 			context: pending.context,
 			task,

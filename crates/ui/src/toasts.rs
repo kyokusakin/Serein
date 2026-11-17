@@ -49,10 +49,11 @@ pub struct Toasts {
 }
 
 impl Toasts {
-	/// States `text` briefly. Repeating a notice that is still on screen restarts its
-	/// deadline rather than stacking a copy, so a repeated failure reads as one event.
+	/// States `text` briefly; a locale key is shown in the current language. Repeating a
+	/// notice that is still on screen restarts its deadline rather than stacking a copy, so a
+	/// repeated failure reads as one event.
 	pub fn push(&mut self, level: design::Level, text: impl Into<String>) {
-		let text = text.into();
+		let text = crate::i18n::translate_if_key(&text.into());
 		if let Some(shown) = self
 			.items
 			.iter_mut()

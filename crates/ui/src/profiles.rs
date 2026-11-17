@@ -583,7 +583,7 @@ pub(crate) fn join_blocked(
 	calls_blocked: Option<&'static str>,
 ) -> Option<String> {
 	if let Some(reason) = calls_blocked {
-		return Some(reason.to_owned());
+		return Some(crate::i18n::translate_if_key(reason));
 	}
 	let key = match state
 		.voice
@@ -619,9 +619,12 @@ fn voice_tile(
 		state: &'a State,
 		user: &'a User,
 		entry: &'a client_core::voice::RosterEntry,
-	) -> (Option<&'a User>, &'a str) {
+	) -> (Option<&'a User>, std::borrow::Cow<'a, str>) {
 		if entry.participant.user == user.id {
-			(Some(user), state.user_display_name(user))
+			(
+				Some(user),
+				std::borrow::Cow::Borrowed(state.user_display_name(user)),
+			)
 		} else {
 			crate::voice::resolve_member(state, entry)
 		}
