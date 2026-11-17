@@ -3,7 +3,7 @@ use discord_protocol::activity_sharing::{self, MAX_SETTINGS_RESPONSE, Settings};
 use wreq::Method;
 
 impl DiscordApi {
-	async fn read_activity_sharing(&self) -> Result<Settings, Failure> {
+	pub(super) async fn read_activity_sharing(&self) -> Result<Settings, Failure> {
 		let bytes = self
 			.request_limited(
 				Method::GET,

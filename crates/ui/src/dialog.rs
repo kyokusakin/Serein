@@ -359,15 +359,15 @@ impl SettingsShell {
 					.show(ui, |ui| {
 						if wide {
 							let rect = egui::Rect::from_min_size(
-								ui.max_rect().right_top() + egui::vec2(16.0, 0.0),
-								egui::vec2(40.0, 64.0),
+								ui.max_rect().right_top() + egui::vec2(24.0, -28.0),
+								egui::Vec2::splat(32.0),
 							);
 							let mut close_ui = ui.new_child(
 								egui::UiBuilder::new()
 									.id_salt("settings-close")
 									.max_rect(rect),
 							);
-							close = crate::settings::close_control(&mut close_ui).clicked();
+							close = crate::settings::close_button(&mut close_ui).clicked();
 						} else {
 							ui.horizontal_top(|ui| {
 								let width = (ui.available_width() - 48.0).max(120.0);
@@ -379,7 +379,7 @@ impl SettingsShell {
 										add(ui, ShellRegion::Navigation { compact: true });
 									},
 								);
-								close = crate::settings::close_control(ui).clicked();
+								close = crate::settings::close_button(ui).clicked();
 							});
 							ui.add_space(8.0);
 						}

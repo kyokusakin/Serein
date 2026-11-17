@@ -95,7 +95,7 @@ impl StickersUi {
 					),
 				});
 			}
-			Ok(Some(_)) => self.error = Some("Prepared sticker exceeds 512 KB"),
+			Ok(Some(_)) => self.error = Some("server-stickers-error-too-large"),
 			Ok(None) => {}
 			Err(error) => self.error = Some(error),
 		}
@@ -432,13 +432,13 @@ impl StickersUi {
 		};
 		let (title, subtitle, danger) = match dialog {
 			Dialog::Edit { .. } => (
-				"Edit sticker",
-				"Update the sticker name, description and related emoji.".to_owned(),
+				"server-stickers-edit-title",
+				crate::i18n::translate("server-stickers-edit-message"),
 				false,
 			),
 			Dialog::Delete { name, .. } => (
-				"Delete sticker?",
-				format!("Removing {name} cannot be undone."),
+				"server-stickers-delete-title",
+				crate::i18n::translate_args("server-stickers-delete-message", &[("name", name)]),
 				true,
 			),
 		};

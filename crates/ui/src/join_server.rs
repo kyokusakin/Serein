@@ -103,6 +103,7 @@ pub(super) struct JoinDialog {
 	icon_pending: bool,
 	icon_error: Option<&'static str>,
 	submitted: bool,
+	discover: bool,
 }
 
 impl Default for JoinDialog {
@@ -123,6 +124,7 @@ impl Default for JoinDialog {
 			icon_pending: false,
 			icon_error: None,
 			submitted: false,
+			discover: false,
 		}
 	}
 }
@@ -265,7 +267,13 @@ impl JoinDialog {
 				.is_some_and(|c| c.guild == Some(guild)),
 			model::JoinedTarget::Channel(channel) => state.selected == Some(channel),
 		});
+		if self.discover
+			&& let Some(command) = state.search_discovery("")
+		{
+			commands.push(command);
+		}
 		if close
+			|| self.discover
 			|| response.close
 			|| joined && input_code(&self.input).as_deref() == Some(state.invite_join.code.as_str())
 		{
@@ -766,14 +774,15 @@ impl JoinDialog {
 					crate::i18n::translate("join-server-body-don-t-have-an-invite"),
 					15.0,
 				));
-				ui.hyperlink_to(
-					egui::RichText::new(crate::i18n::translate(
-						"join-server-body-explore-discoverable-communities-in-discord",
-					))
-					.size(13.0)
-					.color(colors.link),
-					"https://discord.com/servers",
-				);
+				self.discover |= ui
+					.link(
+						egui::RichText::new(crate::i18n::translate(
+							"join-server-body-explore-discoverable-communities-in-discord",
+						))
+						.size(13.0)
+						.color(colors.link),
+					)
+					.clicked();
 			});
 		(ready, member, loading, accepted, parsed)
 	}

@@ -1665,11 +1665,12 @@ impl SearchUi {
 				ui.ctx().copy_text(link);
 				ui.close();
 			}
-			if ui
-				.button(crate::i18n::translate(
-					"timeline-message-actions-copy-message-id",
-				))
-				.clicked()
+			if crate::developer_mode()
+				&& ui
+					.button(crate::i18n::translate(
+						"timeline-message-actions-copy-message-id",
+					))
+					.clicked()
 			{
 				ui.ctx().copy_text(hit.id.to_string());
 				ui.close();

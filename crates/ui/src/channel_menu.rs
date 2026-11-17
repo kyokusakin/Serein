@@ -65,6 +65,24 @@ pub(super) struct ChannelMenu {
 }
 
 impl ChannelMenu {
+	pub(super) fn take_webhook_avatar_request(&mut self, request: u64) -> Option<Id> {
+		let dialog = self.dialog.as_mut()?;
+		dialog
+			.integrations
+			.take_avatar_request(request)
+			.then_some(dialog.guild)
+	}
+	pub(super) fn accept_webhook_avatar(
+		&mut self,
+		ctx: &egui::Context,
+		guild: Id,
+		request: u64,
+		result: Result<Option<(String, egui::ColorImage)>, &'static str>,
+	) {
+		if let Some(dialog) = self.dialog.as_mut().filter(|dialog| dialog.guild == guild) {
+			dialog.integrations.accept_avatar(ctx, request, result);
+		}
+	}
 	pub fn is_open(&self) -> bool {
 		self.dialog.is_some()
 	}
@@ -301,8 +319,12 @@ impl ChannelMenu {
 					}
 				}
 			}
-			ui.separator();
-			if row(ui, "channel-menu-context-copy-channel-id", true, false).clicked() {
+			if crate::developer_mode() {
+				ui.separator();
+			}
+			if crate::developer_mode()
+				&& row(ui, "channel-menu-context-copy-channel-id", true, false).clicked()
+			{
 				ui.ctx().copy_text(channel.id.to_string());
 				ui.close();
 			}
@@ -847,21 +869,21 @@ impl ChannelMenu {
 		}
 		let mut message = String::new();
 		if self.preference_error {
-			message.push_str(
-				"Saved channel preferences are full. Remove a favorite or pin, or expand a category.",
-			);
+			message.push_str(&crate::i18n::translate("channel-menu-preferences-full"));
 		}
 		if let Some(id) = self.feedback {
 			if !message.is_empty() {
 				message.push_str("\n\n");
 			}
-			message.push_str(if state.channel_action_pending() {
-				"Updating channel settings…"
-			} else {
-				state
-					.channel_action_status(id)
-					.unwrap_or("The channel action could not be started.")
-			});
+			message.push_str(&crate::i18n::translate_if_key(
+				if state.channel_action_pending() {
+					"channel-menu-updating"
+				} else {
+					state
+						.channel_action_status(id)
+						.unwrap_or("channel-menu-action-not-started")
+				},
+			));
 		}
 		let dismissed = dialog::Dialog::new(
 			"channel-feedback",
@@ -897,19 +919,23 @@ impl Dialog {
 				for (kind, label, description) in [
 					(
 						CreateKind::Text,
-						"Text",
-						"Send messages, images, and files.",
+						"channel-menu-type-text",
+						"channel-menu-type-text-description",
 					),
-					(CreateKind::Voice, "Voice", "Hang out and talk together."),
+					(
+						CreateKind::Voice,
+						"channel-menu-type-voice",
+						"channel-menu-type-voice-description",
+					),
 					(
 						CreateKind::Announcement,
-						"Announcement",
-						"Share updates. Requires a Community server.",
+						"channel-menu-type-announcement",
+						"channel-menu-type-announcement-description",
 					),
 					(
 						CreateKind::Forum,
-						"Forum",
-						"Organize discussions into separate posts.",
+						"channel-pill-forum",
+						"channel-menu-type-forum-description",
 					),
 				] {
 					if design::radio_row(ui, self.create_kind == kind, label, Some(description))
@@ -2138,7 +2164,12 @@ mod tests {
 			h.click(
 				&ctx,
 				text.iter()
-					.find(|(s, _)| s == "Member 88")
+					.find(|(s, _)| {
+						*s == crate::i18n::translate_args(
+							"channel-permissions-unknown-member",
+							&[("id", "88")],
+						)
+					})
 					.unwrap()
 					.1
 					.center(),
@@ -2275,6 +2306,7 @@ mod tests {
 
 	#[test]
 	fn context_menu_keyboard_mouse_permissions_and_delete_confirmation() {
+		crate::set_developer_mode(true);
 		for light in [false, true] {
 			for action in [
 				"Add To Favorites",

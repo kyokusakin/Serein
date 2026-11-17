@@ -98,7 +98,12 @@ impl State {
 		user: Id,
 		change: VoiceChange,
 	) -> bool {
-		if !self.user.as_ref().is_some_and(|own| own.id != user)
+		// Moderators may server-mute, server-deafen and move themselves, but leave a call with
+		// their own disconnect control.
+		if !self
+			.user
+			.as_ref()
+			.is_some_and(|own| own.id != user || change != VoiceChange::Move(None))
 			|| !self.voice.roster.iter().any(|entry| {
 				entry.guild == guild && entry.channel == channel && entry.participant.user == user
 			}) || !self
@@ -110,6 +115,7 @@ impl State {
 		}
 		let permission = match change {
 			VoiceChange::Mute(_) => p::MUTE_MEMBERS,
+			VoiceChange::Deafen(_) => p::DEAFEN_MEMBERS,
 			VoiceChange::Move(_) => p::MOVE_MEMBERS,
 		};
 		self.permission(channel, permission) == Some(true)
@@ -582,6 +588,7 @@ impl State {
 			guild,
 			request: self.server_admin.sequence,
 			action: Box::new(action),
+			account: self.user.as_ref().map(|user| user.id),
 		})
 	}
 	pub fn server_admin_command_allowed(&self, guild: Id, request: u64, action: &Action) -> bool {
@@ -631,9 +638,9 @@ impl State {
 		if self.server_admin.pending {
 			self.server_admin.needs_refresh |= self.server_admin.saving;
 			self.server_admin.error = Some(if self.server_admin.saving {
-				"Outcome unknown; reload before retrying"
+				"server-admin-error-outcome-unknown"
 			} else {
-				"Server administration disconnected; reload to continue"
+				"server-admin-error-disconnected"
 			});
 			self.server_admin.pending = false;
 			self.server_admin.saving = false;
@@ -715,7 +722,7 @@ impl State {
 				!= self.server_admin.permission_revision
 		{
 			self.server_admin.audit_log = None;
-			self.server_admin.error = Some("Server permissions changed; reload the audit log");
+			self.server_admin.error = Some("server-admin-error-audit-log-permissions");
 			return Ok(());
 		}
 		if matches!(action, Some(Action::Integrations(_)))
@@ -723,8 +730,7 @@ impl State {
 				!= self.server_admin.permission_revision
 		{
 			self.server_admin.integrations = None;
-			self.server_admin.error =
-				Some("Server permissions changed; reload integrations to continue");
+			self.server_admin.error = Some("server-admin-error-integrations-permissions");
 			self.server_admin.needs_refresh = true;
 			return Ok(());
 		}
@@ -985,7 +991,10 @@ impl State {
 							VoiceChange::Mute(muted) => *muted,
 							_ => participant.server_muted,
 						},
-						server_deafened: participant.server_deafened,
+						server_deafened: match change {
+							VoiceChange::Deafen(deafened) => *deafened,
+							_ => participant.server_deafened,
+						},
 						muted: participant.muted,
 						deafened: participant.deafened,
 						video: participant.video,

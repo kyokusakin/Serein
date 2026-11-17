@@ -50,6 +50,8 @@ pub struct Controls {
 	pub user_volumes: [(u64, u16); 64],
 	/// Watched stream playback percentage, independently muted with zero.
 	pub stream_volume: u16,
+	/// Participant whose end-to-end verification code is wanted; zero means none.
+	pub verify: u64,
 }
 impl Default for Controls {
 	fn default() -> Self {
@@ -61,6 +63,7 @@ impl Default for Controls {
 			deafened: false,
 			user_volumes: [(0, 100); 64],
 			stream_volume: 100,
+			verify: 0,
 		}
 	}
 }
@@ -79,6 +82,12 @@ pub enum Status {
 	Latency(Option<std::time::Duration>),
 	/// Latest active user IDs, zero-padded to the 64-participant limit.
 	Speaking(Box<[u64; 64]>),
+	/// DAVE pairwise verification code with one participant; `None` when they are not in the
+	/// end-to-end encrypted group.
+	VerificationCode {
+		user: u64,
+		code: Option<String>,
+	},
 }
 
 #[cfg(test)]

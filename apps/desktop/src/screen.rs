@@ -16,6 +16,24 @@ use tokio::{runtime::Runtime, sync::watch, task::JoinHandle};
 use zeroize::Zeroizing;
 
 const SIGNAL_TIMEOUT: Duration = Duration::from_secs(30);
+const FIRST_THUMBNAIL: Duration = Duration::from_secs(5);
+const THUMBNAIL_INTERVAL: Duration = Duration::from_secs(5 * 60);
+/// Largest side of the stream preview thumbnail.
+const THUMBNAIL_SIDE: u32 = 512;
+
+/// A downscaled JPEG of one captured picture, or `None` when it does not fit the upload bound.
+fn thumbnail_jpeg(frame: &image::RgbaImage) -> Option<Vec<u8>> {
+	let scale = (THUMBNAIL_SIDE as f32 / frame.width().max(frame.height()) as f32).min(1.0);
+	let width = ((frame.width() as f32 * scale).round() as u32).max(1);
+	let height = ((frame.height() as f32 * scale).round() as u32).max(1);
+	let small = image::imageops::thumbnail(frame, width, height);
+	let rgb = image::DynamicImage::ImageRgba8(small).into_rgb8();
+	let mut jpeg = Vec::new();
+	image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 75)
+		.encode_image(&rgb)
+		.ok()?;
+	(jpeg.len() <= discord_protocol::stream::MAX_THUMBNAIL_BYTES).then_some(jpeg)
+}
 
 /// Names why a share ended, under the same opt-in variable as the voice reports. A share
 /// that stops by itself otherwise leaves only the latest status, which the stop overwrites.
@@ -92,6 +110,16 @@ pub(super) struct Screen {
 	viewers: Option<(Context, u16)>,
 	viewer_cue: bool,
 	share_cued: bool,
+	thumbnail: Thumbnail,
+}
+/// The stream preview others see before joining: one JPEG shortly after capture starts, then
+/// one every few minutes while previews are on.
+#[derive(Default)]
+struct Thumbnail {
+	due: Option<Instant>,
+	wanted: bool,
+	encoding: Option<mpsc::Receiver<Option<Vec<u8>>>>,
+	ready: Option<Vec<u8>>,
 }
 impl Screen {
 	pub fn stop(&mut self) {
@@ -273,7 +301,7 @@ impl Screen {
 		}
 		ui.screen.supported = discord_voice::screen::supported();
 		let cue = model::notification_preferences::Sound::ViewerJoin;
-		if std::mem::take(&mut self.viewer_cue) && ui.notification_options.allows(cue) {
+		if std::mem::take(&mut self.viewer_cue) && ui.sound_options().allows(cue) {
 			ui.notification_preview = Some(cue);
 			ctx.request_repaint();
 		}
@@ -429,7 +457,7 @@ impl Screen {
 				ui::screen::Request::Stop => {
 					// Discord cues the end of this device's own share, like its start.
 					let cue = model::notification_preferences::Sound::ScreenShareOff;
-					if self.live.is_some() && ui.notification_options.allows(cue) {
+					if self.live.is_some() && ui.sound_options().allows(cue) {
 						ui.notification_preview = Some(cue);
 						ctx.request_repaint();
 					}
@@ -491,7 +519,7 @@ impl Screen {
 		{
 			self.share_cued = true;
 			let cue = model::notification_preferences::Sound::ScreenShareOn;
-			if ui.notification_options.allows(cue) {
+			if ui.sound_options().allows(cue) {
 				ui.notification_preview = Some(cue);
 				ctx.request_repaint();
 			}
@@ -503,13 +531,53 @@ impl Screen {
 			let on_channel = state.selected == Some(live.context.channel);
 			let shown = on_channel
 				&& ctx.input(|input| input.focused && !input.viewport().minimized.unwrap_or(false));
-			live.worker.set_preview_visible(shown);
+			let thumbnail = &mut self.thumbnail;
+			let previews = state
+				.soundboard
+				.settings()
+				.is_none_or(|settings| settings.stream_previews);
+			if !previews || !live.worker.captured() {
+				*thumbnail = Thumbnail::default();
+			} else {
+				let now = Instant::now();
+				let due = *thumbnail.due.get_or_insert(now + FIRST_THUMBNAIL);
+				if now >= due && thumbnail.encoding.is_none() {
+					thumbnail.wanted = true;
+				} else {
+					ctx.request_repaint_after(due.saturating_duration_since(now));
+				}
+			}
+			// A thumbnail needs one picture even while the local preview is paused.
+			live.worker.set_preview_visible(shown || thumbnail.wanted);
 			ui.screen.preview_paused = !shown;
-			if !shown {
-				// The pause message covers the tile. Keeping the texture stops the tile from
-				// unmounting, and the worker republishes its retained frame when preview returns.
-				let _ = live.worker.take_preview();
-			} else if let Some(frame) = live.worker.take_preview() {
+			let frame = live.worker.take_preview();
+			if thumbnail.wanted
+				&& let Some(frame) = &frame
+			{
+				thumbnail.wanted = false;
+				thumbnail.due = Some(Instant::now() + THUMBNAIL_INTERVAL);
+				let (send, receive) = mpsc::channel();
+				let frame = frame.clone();
+				let wake = ctx.clone();
+				std::thread::spawn(move || {
+					let _ = send.send(thumbnail_jpeg(&frame));
+					wake.request_repaint();
+				});
+				thumbnail.encoding = Some(receive);
+			}
+			if let Some(encoding) = &thumbnail.encoding {
+				match encoding.try_recv() {
+					Ok(jpeg) => {
+						thumbnail.encoding = None;
+						thumbnail.ready = jpeg;
+					}
+					Err(mpsc::TryRecvError::Disconnected) => thumbnail.encoding = None,
+					Err(mpsc::TryRecvError::Empty) => {}
+				}
+			}
+			// While paused, the pause message covers the tile. Keeping the texture stops the tile
+			// from unmounting, and the worker republishes its retained frame when preview returns.
+			if shown && let Some(frame) = frame {
 				let image = egui::ColorImage::from_rgba_unmultiplied(
 					[frame.width() as usize, frame.height() as usize],
 					frame.as_raw(),
@@ -548,6 +616,27 @@ impl Screen {
 			.live
 			.as_ref()
 			.and_then(|live| live.worker.capture_status());
+		if self.live.is_none() {
+			self.thumbnail = Thumbnail::default();
+		}
+		if self.command.is_none()
+			&& let Some(live) = &self.live
+			&& let Some(user) = state.user.as_ref().map(|user| user.id)
+			&& let Some(jpeg) = self.thumbnail.ready.take()
+		{
+			let guild = state
+				.voice
+				.active
+				.as_ref()
+				.filter(|call| call.channel == live.context.channel)
+				.and_then(|call| call.guild);
+			self.command = Some(Command::UploadStreamPreview {
+				guild,
+				channel: live.context.channel,
+				user,
+				jpeg,
+			});
+		}
 		self.command.take()
 	}
 	fn finish_start(&mut self, runtime: &Runtime, ctx: &egui::Context) {
@@ -596,6 +685,7 @@ impl Screen {
 					Status::RemoteAudio
 					| Status::Speaking(_)
 					| Status::CameraAvailable(_)
+					| Status::VerificationCode { .. }
 					| Status::Latency(_) => {
 						return Ok(());
 					}

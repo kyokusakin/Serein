@@ -16,14 +16,36 @@ pub(crate) const MAX_PACKET: usize = 4096;
 pub(crate) const MAX_SIGNAL: usize = 64 * 1024;
 pub(crate) use client_core::voice::MAX_PARTICIPANTS;
 
-/// Ephemeral DAVE identity shared by the call and its Go Live streams.
+/// DAVE identity shared by the call and its Go Live streams.
 ///
 /// Discord requires one identity keypair across simultaneous media sessions in
-/// a voice channel. It is never persisted or formatted for diagnostics.
+/// a voice channel. With persistent verification codes on, its private key is kept in the OS
+/// credential store so friends verify this device once; otherwise it lives for one call. It is
+/// never formatted for diagnostics.
 pub struct Identity(SigningKeyPair);
 impl Identity {
 	pub fn generate() -> Arc<Self> {
 		Arc::new(Self(SigningKeyPair::generate()))
+	}
+	/// Rebuilds a kept identity from its P-256 private scalar.
+	pub fn from_private(private: &[u8]) -> Option<Arc<Self>> {
+		// A shorter scalar would be zero-padded into a different key.
+		if private.len() != 32 {
+			return None;
+		}
+		let key = p256::ecdsa::SigningKey::from_slice(private).ok()?;
+		Some(Arc::new(Self(SigningKeyPair {
+			private: key.to_bytes().to_vec(),
+			public: key
+				.verifying_key()
+				.to_encoded_point(false)
+				.to_bytes()
+				.to_vec(),
+		})))
+	}
+	/// The P-256 private scalar, for the OS credential store only.
+	pub fn private(&self) -> zeroize::Zeroizing<Vec<u8>> {
+		zeroize::Zeroizing::new(self.0.private.clone())
 	}
 }
 impl Drop for Identity {
@@ -717,6 +739,14 @@ impl Drop for Dave {
 mod tests {
 	use super::*;
 	use openmls::prelude::{OpenMlsProvider, ProtocolVersion};
+	#[test]
+	fn a_kept_identity_restores_the_same_key_pair_and_rejects_invalid_keys() {
+		let identity = Identity::generate();
+		let restored = Identity::from_private(&identity.private()).unwrap();
+		assert!(identity.0 == restored.0);
+		assert!(Identity::from_private(&[0; 32]).is_none());
+		assert!(Identity::from_private(&identity.private()[..31]).is_none());
+	}
 	#[test]
 	fn authenticated_padding_only_video_does_not_break_the_following_picture() {
 		let mut cipher = Encryption::new(&[7; 32]);

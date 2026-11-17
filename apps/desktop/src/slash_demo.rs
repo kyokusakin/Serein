@@ -8,7 +8,7 @@ pub fn catalog(guild: Option<Id>) -> Vec<schema::Command> {
 			"id":"99101", "version":"1", "application_id":"99000", "name":"weather",
 			"description":"Look up a city forecast.", "contexts":[0,1],
 			"options":[
-				{"type":3,"name":"city","description":"City to look up.","required":true,"max_length":100},
+				{"type":3,"name":"city","description":"City to look up.","required":true,"max_length":100,"autocomplete":true},
 				{"type":3,"name":"units","description":"Temperature units.","choices":[
 					{"name":"Celsius","value":"celsius"},{"name":"Fahrenheit","value":"fahrenheit"}
 				]},
@@ -87,7 +87,50 @@ pub fn preview() -> State {
 	state
 }
 
+const CITIES: [&str; 8] = [
+	"Amsterdam",
+	"Berlin",
+	"Brno",
+	"Paris",
+	"Prague",
+	"Taipei",
+	"Tokyo",
+	"Toronto",
+];
+
 pub fn respond(state: &mut State, request: interactions::Request) {
+	if let interactions::Data::Autocomplete {
+		invocation,
+		focused,
+	} = &request.data
+	{
+		let typed = invocation
+			.options
+			.iter()
+			.find_map(|option| match &option.value {
+				Some(schema::Value::String(text)) if option.name == *focused => {
+					Some(text.to_lowercase())
+				}
+				_ => None,
+			})
+			.unwrap_or_default();
+		let choices = CITIES
+			.iter()
+			.filter(|city| city.to_lowercase().starts_with(&typed))
+			.map(|city| schema::Choice {
+				name: (*city).into(),
+				value: schema::Value::String(city.to_lowercase()),
+			})
+			.collect();
+		state.apply(Envelope {
+			generation: state.generation,
+			event: Event::Interaction(interactions::Event::Suggestions {
+				nonce: request.nonce,
+				choices,
+			}),
+		});
+		return;
+	}
 	let interactions::Data::ApplicationCommand { invocation } = &request.data else {
 		return;
 	};
@@ -151,6 +194,15 @@ pub fn check() {
 			.prepare_application_command(Id(99102), &[], &[])
 			.is_err()
 	);
+	let Some(Command::Interaction(suggest)) =
+		state.request_suggestions(Id(99101), &[], &[("city".into(), "pr".into())], "city")
+	else {
+		panic!("city suggestions");
+	};
+	respond(&mut state, suggest);
+	let suggestions = state.interactions.suggestions.as_ref().unwrap();
+	assert_eq!(suggestions.choices.len(), 1);
+	assert_eq!(suggestions.choices[0].name, "Prague");
 	respond(&mut state, request);
 	assert!(!state.interactions.busy());
 	assert_eq!(state.interactions.ephemeral.len(), 1);

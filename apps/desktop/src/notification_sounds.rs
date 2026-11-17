@@ -15,9 +15,16 @@ use std::{
 pub const RING_INTERVAL: Duration = Duration::from_secs(6);
 pub const OUTGOING_RING_INTERVAL: Duration = Duration::from_secs(3);
 
+/// What one worker plays: a bundled cue or a downloaded soundboard file.
+#[derive(Clone)]
+pub enum Clip {
+	Cue(Sound),
+	File(Arc<[u8]>),
+}
+
 #[derive(Default)]
 pub struct Sounds {
-	send: Option<SyncSender<(u64, Sound, u8)>>,
+	send: Option<SyncSender<(u64, Clip, u8)>>,
 	generation: Arc<AtomicU64>,
 	status: Arc<AtomicU8>,
 }
@@ -42,8 +49,11 @@ impl Sounds {
 		self.status.store(0, Ordering::Release);
 	}
 	pub fn play(&mut self, sound: Sound, volume: u8, ctx: &eframe::egui::Context) {
+		self.play_clip(Clip::Cue(sound), volume, ctx);
+	}
+	pub fn play_clip(&mut self, clip: Clip, volume: u8, ctx: &eframe::egui::Context) {
 		if self.send.is_none() {
-			let (send, receive) = mpsc::sync_channel::<(u64, Sound, u8)>(1);
+			let (send, receive) = mpsc::sync_channel::<(u64, Clip, u8)>(1);
 			let generation = self.generation.clone();
 			let status = self.status.clone();
 			let context = ctx.clone();
@@ -108,7 +118,7 @@ impl Sounds {
 			.send
 			.as_ref()
 			.expect("worker started")
-			.try_send((request, sound, volume))
+			.try_send((request, clip, volume))
 			.is_err()
 		{
 			self.status.store(0, Ordering::Release);
@@ -121,7 +131,11 @@ impl Drop for Sounds {
 	}
 }
 
-fn samples(sound: Sound, rate: u32, current: &impl Fn() -> bool) -> Result<Vec<[f32; 2]>, ()> {
+fn samples(clip: Clip, rate: u32, current: &impl Fn() -> bool) -> Result<Vec<[f32; 2]>, ()> {
+	let sound = match clip {
+		Clip::Cue(sound) => sound,
+		Clip::File(bytes) => return file_samples(&bytes, rate, current),
+	};
 	let bytes: &[u8] = match sound {
 		Sound::Message => include_bytes!("../../../assets/sounds/discord/message.mp3"),
 		Sound::CurrentChannel => {
@@ -177,9 +191,64 @@ fn samples(sound: Sound, rate: u32, current: &impl Fn() -> bool) -> Result<Vec<[
 	if !current() || pcm.is_empty() {
 		return Err(());
 	}
+	Ok(resample(&pcm, source_rate, rate))
+}
+
+/// A downloaded soundboard file: MP3 or Ogg, mono or stereo, at most `SOUNDBOARD_SECONDS`.
+fn file_samples(bytes: &[u8], rate: u32, current: &impl Fn() -> bool) -> Result<Vec<[f32; 2]>, ()> {
+	const SOUNDBOARD_SECONDS: usize = 8;
+	if bytes.is_empty()
+		|| bytes.len() > model::soundboard::MAX_FILE_BYTES
+		|| !(8000..=192000).contains(&rate)
+	{
+		return Err(());
+	}
+	if bytes.starts_with(b"OggS") {
+		crate::audio::check_ogg_headers(bytes, current).map_err(|_| ())?;
+	}
+	let mut bytes = bytes.to_vec();
+	crate::audio::prepare_media(&mut bytes).map_err(|_| ())?;
+	let mut pcm = Vec::new();
+	let mut source_rate = 0;
+	crate::audio::decode_stream(
+		Box::new(Cursor::new(bytes)),
+		current,
+		&mut |chunk, channels, rate, _| {
+			if !(1..=2).contains(&channels)
+				|| !(8000..=96000).contains(&rate)
+				|| (source_rate != 0 && source_rate != rate)
+				|| pcm.len() + chunk.len() * (3 - channels) > rate as usize * 2 * SOUNDBOARD_SECONDS
+			{
+				return Err("Invalid soundboard sound");
+			}
+			source_rate = rate;
+			let clean = |sample: &f32| {
+				if sample.is_finite() {
+					sample.clamp(-1.0, 1.0)
+				} else {
+					0.0
+				}
+			};
+			if channels == 1 {
+				pcm.extend(chunk.iter().flat_map(|sample| [clean(sample); 2]));
+			} else {
+				pcm.extend(chunk.iter().map(clean));
+			}
+			Ok(())
+		},
+	)
+	.map_err(|_| ())?;
+	if !current() || pcm.is_empty() {
+		return Err(());
+	}
+	Ok(resample(&pcm, source_rate, rate))
+}
+
+/// Interleaved stereo at `source_rate` to frames at the device rate.
+fn resample(pcm: &[f32], source_rate: u32, rate: u32) -> Vec<[f32; 2]> {
 	let frames = pcm.len() / 2;
 	// ponytail: linear rate conversion; use a band-limited resampler if quality measurements require it.
-	Ok((0..(frames * rate as usize).div_ceil(source_rate as usize))
+	(0..(frames * rate as usize).div_ceil(source_rate as usize))
 		.map(|frame| {
 			let position = frame as f64 * f64::from(source_rate) / f64::from(rate);
 			let index = (position as usize).min(frames - 1);
@@ -190,10 +259,10 @@ fn samples(sound: Sound, rate: u32, current: &impl Fn() -> bool) -> Result<Vec<[
 				a + (b - a) * (position - index as f64) as f32
 			})
 		})
-		.collect())
+		.collect()
 }
 fn open(
-	sound: Sound,
+	sound: Clip,
 	volume: u8,
 	generation: Arc<AtomicU64>,
 	request: u64,
@@ -404,7 +473,7 @@ mod tests {
 				Sound::PttStop,
 				Sound::ViewerJoin,
 			]
-			.map(|s| samples(s, rate, &|| true).unwrap());
+			.map(|s| samples(Clip::Cue(s), rate, &|| true).unwrap());
 			assert_ne!(cues[0], cues[1]);
 			assert_ne!(cues[3], cues[4]);
 			assert_ne!(cues[5], cues[6]);
@@ -451,7 +520,19 @@ mod tests {
 				);
 			}
 		}
-		assert!(samples(Sound::Message, 48000, &|| false).is_err());
-		assert!(samples(Sound::Message, 0, &|| true).is_err());
+		assert!(samples(Clip::Cue(Sound::Message), 48000, &|| false).is_err());
+		assert!(samples(Clip::Cue(Sound::Message), 0, &|| true).is_err());
+	}
+
+	#[test]
+	fn soundboard_files_decode_within_bounds() {
+		let file: Arc<[u8]> = include_bytes!("../../../assets/sounds/discord/deafen.mp3")
+			.as_slice()
+			.into();
+		let decoded = samples(Clip::File(file), 48000, &|| true).unwrap();
+		assert!(!decoded.is_empty() && decoded.len() <= 48000 * 8);
+		let oversized: Arc<[u8]> = vec![0; model::soundboard::MAX_FILE_BYTES + 1].into();
+		assert!(samples(Clip::File(oversized), 48000, &|| true).is_err());
+		assert!(samples(Clip::File(b"not audio".as_slice().into()), 48000, &|| true).is_err());
 	}
 }

@@ -578,7 +578,7 @@ pub(super) fn decode_stream(
 
 // Skip metadata without decoding attacker-provided tag lengths/artwork. Compact in-place:
 // only bounded PCM fmt/data chunks reach the WAV demuxer; ID3 parsing is disabled entirely.
-fn prepare_media(bytes: &mut Vec<u8>) -> Result<(), &'static str> {
+pub(super) fn prepare_media(bytes: &mut Vec<u8>) -> Result<(), &'static str> {
 	if bytes.starts_with(b"OggS") {
 		// Preflight bounded the headers; Symphonia handles demuxing and CRC verification.
 		return Ok(());
@@ -727,8 +727,10 @@ fn prepare_media(bytes: &mut Vec<u8>) -> Result<(), &'static str> {
 
 // Symphonia's Ogg comments do not honor MetadataOptions. Bound header allocation before probing;
 // this only checks page framing/header sizes, leaving CRCs and stream decoding to Symphonia.
-#[cfg(any(test, all(debug_assertions, feature = "demo")))]
-fn check_ogg_headers(bytes: &[u8], current: &impl Fn() -> bool) -> Result<(), &'static str> {
+pub(super) fn check_ogg_headers(
+	bytes: &[u8],
+	current: &impl Fn() -> bool,
+) -> Result<(), &'static str> {
 	let mut offset = 0;
 	let mut serial = None;
 	let mut packet = Vec::new();

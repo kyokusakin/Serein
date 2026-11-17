@@ -4544,7 +4544,10 @@ fn card_view(
 											ui.label(RichText::new(since).size(body));
 										});
 									}
-									if full && !data.connections.is_empty() {
+									if full
+										&& !data.connections.is_empty()
+										&& !(own && crate::streamer_mode().hides_personal())
+									{
 										section(
 											ui,
 											&theme,
@@ -4563,6 +4566,7 @@ fn card_view(
 									// Discord keeps the private note at the bottom of the profile.
 									if !own
 										&& !user.webhook && !data.private
+										&& !crate::streamer_mode().hides_personal()
 										&& !crate::interface_tweaks::on(
 											ui.ctx(),
 											extensions::InterfaceTweak::HiddenProfileNotes,

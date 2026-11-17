@@ -431,6 +431,7 @@ impl Watch {
 						Status::RemoteAudio
 						| Status::Speaking(_)
 						| Status::CameraAvailable(_)
+						| Status::VerificationCode { .. }
 						| Status::Latency(_) => {
 							return Ok(());
 						}

@@ -48,6 +48,12 @@ pub struct AppPreferences {
 	pub hide_nitro_emojis: bool,
 	/// Device-local opt-in; older saved preferences deserialize with conversion off.
 	pub convert_emoticons: bool,
+	/// Discord's Developer Mode; older saved preferences deserialize with it off.
+	pub developer_mode: bool,
+	/// Discord's Streamer Mode switches; older saved preferences use Discord's defaults.
+	pub streamer_mode: model::streamer_mode::StreamerMode,
+	/// Keep this device's voice encryption identity across calls so verification codes persist.
+	pub persistent_verification_codes: bool,
 	/// Hide visible rows authored by blocked users without changing account relationships.
 	pub hide_blocked_messages: bool,
 	/// When the blocked-message filter is on, also hide rows authored by ignored users.
@@ -99,6 +105,10 @@ pub struct AppPreferences {
 	pub user_volumes: Vec<(u64, u16)>,
 	/// Voice participants silenced on this device only, bounded like the volume overrides.
 	pub muted_users: Vec<u64>,
+	/// Voice participants whose soundboard sounds this device does not play.
+	pub soundboard_muted_users: Vec<u64>,
+	/// Voice participants whose camera this device does not show.
+	pub video_disabled_users: Vec<u64>,
 	/// Profile cosmetics shown on this device; older preferences show all of them.
 	pub cosmetics: model::CosmeticPreferences,
 	/// Disk budgets and retention for downloaded images, from bounded presets.
@@ -123,6 +133,9 @@ impl Default for AppPreferences {
 			show_hidden_channels: false,
 			hide_nitro_emojis: false,
 			convert_emoticons: false,
+			developer_mode: false,
+			streamer_mode: Default::default(),
+			persistent_verification_codes: false,
 			hide_blocked_messages: false,
 			hide_ignored_messages: false,
 			preload_on_hover: false,
@@ -152,6 +165,8 @@ impl Default for AppPreferences {
 			expanded_folders: Vec::new(),
 			user_volumes: Vec::new(),
 			muted_users: Vec::new(),
+			soundboard_muted_users: Vec::new(),
+			video_disabled_users: Vec::new(),
 			cosmetics: Default::default(),
 			image_cache: Default::default(),
 			time_format: Default::default(),
@@ -180,6 +195,8 @@ impl AppPreferences {
 			&& self.user_volumes.len() <= 64
 			&& self.user_volumes.iter().all(|(_, volume)| *volume <= 200)
 			&& self.muted_users.len() <= 64
+			&& self.soundboard_muted_users.len() <= 64
+			&& self.video_disabled_users.len() <= 64
 			&& self.keybinds.is_valid()
 			&& self.image_cache.is_valid()
 			&& [&self.voice_input, &self.voice_output]

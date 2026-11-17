@@ -1,48 +1,26 @@
 # cs application translations. Edit with Weblate or any Fluent editor.
 
 language-system = Systém
-language-group = Jazyk
 language-label = Jazyk zobrazení
-language-description = Zvolte jazyk aplikace Serein. Obsah Discordu se nepřekládá.
-section-user = Uživatelská nastavení
-section-app = Nastavení aplikace
-section-customization = Přizpůsobení
+language-description = Vyberte jazyk, ve kterém se Serein zobrazí.
 page-account = Můj účet
 page-profile = Profil
 page-general = Obecné
 page-appearance = Vzhled
-page-chat = Chat
 page-messaging-permissions = Oprávnění zpráv
 page-notifications = Oznámení
 page-registered-games = Registrované hry
 page-voice = Hlas a video
-page-keybinds = Klávesové zkratky
 page-storage = Data a soukromí
 page-updates = Aktualizace
 page-extensions = Rozšíření
 page-themes = Motivy
-description-account = Účet Discord přihlášený na tomto zařízení.
-description-profile = Zvolte, jak se zobrazujete na Discordu.
-description-general = Spouštění, okno a grafika na tomto zařízení.
-description-appearance = Motiv, barvy, efekty okna a rozvržení.
-description-chat = Chování zpráv, médií, odkazů a posouvání.
-description-messaging-permissions = Určete, kdo vás může kontaktovat a jak se filtrují zprávy.
-description-notifications = Zvolte, která oznámení dostáváte a jak se zobrazují.
-description-registered-games = Sdílejte, co hrajete, a opravte nebo přidejte hry, které Serein rozpozná.
-description-voice = Mikrofon, reproduktory, kamera a zpracování hlasu.
-description-keybinds = Klávesové zkratky aplikace Serein.
-description-storage = Co Serein uchovává na tomto zařízení.
-description-updates = Udržujte Serein na tomto zařízení aktuální.
-description-extensions = Správa komunitních pluginů.
-description-themes = Výběr komunitního motivu.
 theme-maker = Tvůrce motivů
-theme-maker-description = Upravte si ho podle sebe. Změny uvidíte přímo v konverzacích.
 search = Hledat
 no-settings-found = Nebyla nalezena žádná nastavení
 search-suggestion = Zkuste motiv, oznámení, hlas nebo mezipaměť.
 exit-preview = Ukončit náhled
 log-out = Odhlásit se
-unofficial = Neoficiální · bez podpory Discordu
 offline-preview = Offline náhled · změny zůstanou v této relaci a nikdy se neodešlou.
 general-startup = Spouštění
 general-open-at-startup = Otevřít Serein při spuštění počítače
@@ -1526,7 +1504,7 @@ join-server-body-choose-join-server-to-confirm = Potvrďte volbu Připojit k ser
 # Context: body
 join-server-body-don-t-have-an-invite = Nemáte pozvánku?
 # Context: body
-join-server-body-explore-discoverable-communities-in-discord = Prozkoumejte objevitelné komunity v Discordu ↗
+join-server-body-explore-discoverable-communities-in-discord = Prozkoumejte objevitelné komunity v Discordu
 # Context: body
 join-server-body-fetching-server-details = Načítání podrobností o serveru…
 # Context: body
@@ -4987,7 +4965,6 @@ badges-hide-levels = Skrýt úrovně
 # Context: badges
 badges-manage = Spravovat odznaky
 page-language-time = Jazyk a čas
-description-language-time = Jazyk rozhraní a zobrazení času.
 time-format-group = Formát času
 time-format-auto = Automaticky
 time-format-12-hour = 12hodinový

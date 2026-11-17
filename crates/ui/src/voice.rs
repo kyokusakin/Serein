@@ -231,165 +231,6 @@ impl MessagingUi {
 		values[index] = (user.0, volume);
 	}
 
-	fn voice_participant_menu(
-		&mut self,
-		response: &egui::Response,
-		state: &State,
-		entry: &RosterEntry,
-	) {
-		crate::user_menu::popup(response, egui::Popup::default_response_id(response))
-			.close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-			.show(|ui| {
-				ui.set_width(220.0);
-				let id = entry.participant.user.0;
-				if let Some(call) = state
-					.voice
-					.active
-					.as_ref()
-					.filter(|call| call.channel == entry.channel && call.guild.is_none())
-					&& state.user.as_ref().is_some_and(|own| own.id.0 != id)
-					&& !call.participants.iter().any(|p| p.user.0 == id)
-				{
-					let stop = state
-						.voice
-						.ringing(call.channel)
-						.contains(&entry.participant.user);
-					let enabled = state
-						.ring_recipient(call.channel, call.request, entry.participant.user, stop)
-						.is_some();
-					if ui
-						.add_enabled(
-							enabled,
-							egui::Button::new(crate::i18n::translate(if stop {
-								"voice-recipient-stop-ringing"
-							} else {
-								"voice-recipient-ring"
-							})),
-						)
-						.clicked()
-					{
-						self.ring_request =
-							Some((call.channel, call.request, entry.participant.user, stop));
-						ui.close();
-					}
-					ui.separator();
-				}
-				if state.user.as_ref().is_some_and(|own| own.id.0 != id)
-					&& !inactive_recipient(state, entry.channel, entry.participant.user)
-				{
-					let muted = self.voice_user_locally_muted(entry.participant.user);
-					if ui
-						.button(crate::i18n::translate_if_key(
-							&(if muted {
-								crate::i18n::translate("voice-voice-participant-menu-unmute")
-							} else {
-								crate::i18n::translate("voice-voice-participant-menu-mute")
-							}),
-						))
-						.on_hover_text(crate::i18n::translate(
-							"voice-voice-participant-menu-silence-this-person-on-this-device-only-nobody-else-is",
-						))
-						.clicked()
-					{
-						self.set_voice_user_locally_muted(entry.participant.user, !muted);
-					}
-					let mut volume = self
-						.voice_user_volumes
-						.as_deref()
-						.and_then(|values| values.iter().find(|(user, _)| *user == id))
-						.map_or(100, |(_, volume)| *volume);
-					let changed =
-						gain_slider(ui, &mut volume, "voice-voice-participant-menu-user-volume")
-							.changed();
-					let reset = ui
-						.add_enabled(
-							volume != 100,
-							egui::Button::new(crate::i18n::translate(
-								"voice-voice-participant-menu-reset-volume",
-							)),
-						)
-						.clicked();
-					if changed || reset {
-						self.set_voice_user_volume(
-							entry.participant.user,
-							if reset { 100 } else { volume },
-						);
-					}
-					ui.separator();
-				}
-				let (guild, channel, user) = (entry.guild, entry.channel, entry.participant.user);
-				let can_move =
-					state.can_moderate_voice(guild, channel, user, VoiceChange::Move(None));
-				let muted = entry.participant.server_muted;
-				let can_mute =
-					state.can_moderate_voice(guild, channel, user, VoiceChange::Mute(!muted));
-				if can_move || can_mute {
-					let enabled = !state.server_admin.pending
-						&& (state.demo
-							|| (state.gateway_connected && state.auth == AuthState::Authenticated));
-					ui.add_enabled_ui(enabled, |ui| {
-						if can_mute
-							&& ui
-								.button(crate::i18n::translate(if muted {
-									"voice-server-unmute"
-								} else {
-									"voice-server-mute"
-								}))
-								.clicked()
-						{
-							self.voice_moderation =
-								Some((guild, channel, user, VoiceChange::Mute(!muted)));
-							ui.close();
-						}
-						if can_move {
-							ui.menu_button(crate::i18n::translate("voice-move-to"), |ui| {
-								egui::ScrollArea::vertical()
-									.max_height(240.0)
-									.show(ui, |ui| {
-										for target in state.channels.iter().filter(|target| {
-											target.guild == Some(guild)
-												&& target.kind == 2 && target.id != channel
-										}) {
-											let change = VoiceChange::Move(Some(target.id));
-											if state.can_view(target.id)
-												&& state.permission(
-													target.id,
-													model::permissions::CONNECT,
-												) == Some(true) && ui.button(&target.name).clicked()
-											{
-												self.voice_moderation =
-													Some((guild, channel, user, change));
-												ui.close();
-											}
-										}
-									});
-							});
-							if ui
-								.button(crate::i18n::translate("voice-disconnect-member"))
-								.clicked()
-							{
-								self.voice_moderation =
-									Some((guild, channel, user, VoiceChange::Move(None)));
-								ui.close();
-							}
-						}
-					});
-					ui.separator();
-				}
-				if let Some(user) = resolve_member(state, entry).0 {
-					crate::user_menu::contents(
-						ui,
-						state,
-						user,
-						crate::user_menu::Place::Conversation(entry.channel),
-						&mut self.profile,
-						&mut self.user_action,
-						None,
-					);
-				}
-			});
-	}
-
 	fn is_speaking(&self, state: &State, channel: Id, participant: &Participant) -> bool {
 		!inactive_recipient(state, channel, participant.user)
 			&& !self.voice_user_locally_muted(participant.user)
@@ -1346,7 +1187,11 @@ impl MessagingUi {
 		})
 	}
 
+	/// A participant's camera picture, unless this device turned their video off.
 	fn remote_texture(&self, user: Id) -> Option<&egui::load::SizedTexture> {
+		if self.voice_video_disabled.contains(&user.0) {
+			return None;
+		}
 		self.voice_remote_video
 			.iter()
 			.find(|(id, _)| *id == user)
@@ -2721,16 +2566,9 @@ impl MessagingUi {
 		}
 	}
 
-	pub(super) fn voice_settings_content(
-		&mut self,
-		ui: &mut egui::Ui,
-		demo: bool,
-		active: bool,
-		compact: bool,
-	) {
-		let colors = design::palette(ui);
+	pub(super) fn voice_settings_content(&mut self, ui: &mut egui::Ui, demo: bool, active: bool) {
 		ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
-		ui.spacing_mut().item_spacing.y = if compact { 6.0 } else { 12.0 };
+		ui.spacing_mut().item_spacing.y = 12.0;
 		if !demo && !self.voice_available {
 			design::notice(
 				ui,
@@ -2741,64 +2579,30 @@ impl MessagingUi {
 			);
 		}
 		ui.add_enabled_ui(!demo && self.voice_available, |ui| {
-			if compact {
-				self.voice_audio_controls(ui);
-				egui::CollapsingHeader::new(crate::i18n::translate(
-					"voice-voice-settings-content-voice-processing-input-mode",
-				))
-				.show(ui, |ui| self.voice_processing_controls(ui));
-			} else {
-				design::group(
-					ui,
-					&crate::i18n::translate("voice-voice-settings-content-devices-levels"),
-					|ui| {
-						self.voice_audio_controls(ui);
-						design::card_divider(ui);
-						self.microphone_preview_controls(ui, active);
-					},
-				);
-				design::group(
-					ui,
-					&crate::i18n::translate("voice-voice-settings-content-voice-processing"),
-					|ui| self.voice_processing_controls(ui),
-				);
-			}
-		});
-		if !compact {
-			crate::keybinds::show_voice(
+			design::group(
 				ui,
-				&mut self.keybinds,
-				&mut self.keybind_capture,
-				self.global_keybind_status,
+				&crate::i18n::translate("voice-voice-settings-content-devices-levels"),
+				|ui| {
+					self.voice_audio_controls(ui);
+					design::card_divider(ui);
+					self.microphone_preview_controls(ui, active);
+				},
 			);
-		}
-		design::group(
+			design::group(
+				ui,
+				&crate::i18n::translate("voice-voice-settings-content-voice-processing"),
+				|ui| self.voice_processing_controls(ui),
+			);
+		});
+		crate::keybinds::show_voice(
 			ui,
-			&crate::i18n::translate("voice-voice-settings-content-camera"),
-			|ui| self.camera_settings_content(ui, demo),
+			&mut self.keybinds,
+			&mut self.keybind_capture,
+			self.global_keybind_status,
 		);
-		if active && let Some(code) = &self.voice_privacy_code {
-			egui::CollapsingHeader::new(crate::i18n::translate(
-				"voice-voice-settings-content-voice-privacy-code",
-			))
-			.show(ui, |ui| {
-				ui.add(
-					egui::Label::new(RichText::new(code).monospace())
-						.selectable(true)
-						.wrap(),
-				);
-				ui.label(
-					RichText::new(crate::i18n::translate(
-						"voice-voice-settings-content-compare-with-the-other-participants-this-code-changes-with-the",
-					))
-					.size(12.0)
-					.color(colors.muted),
-				);
-			});
-		}
 	}
 
-	fn camera_settings_content(&mut self, ui: &mut egui::Ui, demo: bool) {
+	pub(super) fn camera_settings_content(&mut self, ui: &mut egui::Ui, demo: bool) {
 		let colors = design::palette(ui);
 		ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
 		if !cfg!(any(
@@ -4992,7 +4796,7 @@ fn shown_participant(state: &State, entry: &RosterEntry) -> Participant {
 	participant
 }
 
-fn inactive_recipient(state: &State, channel: Id, user: Id) -> bool {
+pub(super) fn inactive_recipient(state: &State, channel: Id, user: Id) -> bool {
 	state.voice.active.as_ref().is_some_and(|call| {
 		call.channel == channel
 			&& call.guild.is_none()
@@ -5059,7 +4863,7 @@ pub(super) fn participant_user(state: &State, channel: Id, user: Id) -> Option<&
 }
 
 /// Labelled percentage slider shared by the voice popout and the settings page.
-fn gain_slider(ui: &mut egui::Ui, value: &mut u16, title: &str) -> egui::Response {
+pub(super) fn gain_slider(ui: &mut egui::Ui, value: &mut u16, title: &str) -> egui::Response {
 	let title = crate::i18n::translate_if_key(title);
 	ui.scope(|ui| {
 		let colors = design::palette(ui);
@@ -5075,14 +4879,30 @@ fn gain_controls(ui: &mut egui::Ui, gain: &mut crate::VoiceGain) -> [egui::Respo
 	if ui.available_width() >= 480.0 {
 		ui.columns(2, |columns| {
 			[
-				slider(&mut columns[0], &mut gain.input_percent, "Microphone gain"),
-				slider(&mut columns[1], &mut gain.output_percent, "Speaker volume"),
+				slider(
+					&mut columns[0],
+					&mut gain.input_percent,
+					"voice-voice-popup-content-microphone-gain",
+				),
+				slider(
+					&mut columns[1],
+					&mut gain.output_percent,
+					"voice-voice-popup-content-speaker-volume",
+				),
 			]
 		})
 	} else {
 		[
-			slider(ui, &mut gain.input_percent, "Microphone gain"),
-			slider(ui, &mut gain.output_percent, "Speaker volume"),
+			slider(
+				ui,
+				&mut gain.input_percent,
+				"voice-voice-popup-content-microphone-gain",
+			),
+			slider(
+				ui,
+				&mut gain.output_percent,
+				"voice-voice-popup-content-speaker-volume",
+			),
 		]
 	}
 }
@@ -5431,7 +5251,15 @@ mod tests {
 		}
 		state.permissions.clear_cache();
 		assert!(state.can_moderate_voice(guild, Id(25), Id(2), VoiceChange::Move(Some(Id(26)))));
-		assert!(!state.can_moderate_voice(guild, Id(25), Id(1), VoiceChange::Mute(true)));
+		assert!(state.can_moderate_voice(guild, Id(25), Id(1), VoiceChange::Mute(true)));
+		assert!(
+			!state.can_moderate_voice(guild, Id(25), Id(1), VoiceChange::Move(None)),
+			"your own disconnect is the call control"
+		);
+		assert!(
+			!state.can_moderate_voice(guild, Id(25), Id(2), VoiceChange::Deafen(true)),
+			"server deafen needs Deafen Members"
+		);
 		assert!(!state.can_moderate_voice(guild, Id(25), Id(2), VoiceChange::Move(Some(Id(25)))));
 		assert!(!state.can_moderate_voice(guild, Id(25), Id(2), VoiceChange::Move(Some(Id(20)))));
 		state
@@ -5453,10 +5281,23 @@ mod tests {
 			.get_mut(&Id(26))
 			.unwrap()
 			.overwrites = Some(vec![]);
+		state
+			.permissions
+			.guilds
+			.get_mut(&guild)
+			.unwrap()
+			.roles
+			.as_mut()
+			.unwrap()
+			.iter_mut()
+			.find(|role| role.id == guild)
+			.unwrap()
+			.bits |= p::DEAFEN_MEMBERS;
 		state.permissions.clear_cache();
 		for change in [
 			VoiceChange::Mute(true),
 			VoiceChange::Mute(false),
+			VoiceChange::Deafen(true),
 			VoiceChange::Move(Some(Id(26))),
 			VoiceChange::Move(None),
 		] {
@@ -5503,6 +5344,17 @@ mod tests {
 						.server_muted,
 					muted
 				),
+				VoiceChange::Deafen(deafened) => assert_eq!(
+					state
+						.voice
+						.roster
+						.iter()
+						.find(|entry| entry.participant.user == Id(2))
+						.unwrap()
+						.participant
+						.server_deafened,
+					deafened
+				),
 				VoiceChange::Move(to) => assert_eq!(
 					state
 						.voice
@@ -5523,7 +5375,8 @@ mod tests {
 	#[test]
 	fn voice_moderation_menu_click_records_server_action() {
 		for (label, change) in [
-			("Server mute", VoiceChange::Mute(true)),
+			("Server Mute", VoiceChange::Mute(true)),
+			("Server Deafen", VoiceChange::Deafen(true)),
 			("Disconnect", VoiceChange::Move(None)),
 		] {
 			let mut state = test_support::voice_demo_state();
@@ -5743,7 +5596,7 @@ mod tests {
 					let text = frame(&mut view, &mut state, vec![]);
 					let submenu = text
 						.iter()
-						.find(|(text, _)| text == "Move to")
+						.find(|(text, _)| text == "Move To")
 						.expect("move submenu")
 						.1;
 					for pressed in [true, false] {

@@ -3,7 +3,7 @@ use crate::{avatars::Avatars, design, dialog, icons};
 use client_core::{Command, State};
 use egui::{RichText, Vec2};
 use model::{
-	Id, server_admin,
+	Id, Patch, server_admin,
 	server_integrations::{Action, Integration, Snapshot, Webhook},
 };
 
@@ -26,6 +26,7 @@ struct Draft {
 	id: Option<Id>,
 	name: String,
 	channel: Option<Id>,
+	avatar: Patch<String>,
 }
 struct Deletion {
 	action: Action,
@@ -43,6 +44,11 @@ pub(super) struct IntegrationsUi {
 	error: Option<&'static str>,
 	copy_requested: Option<Id>,
 	copied: Option<Id>,
+	avatar_requested: bool,
+	avatar_request: u64,
+	avatar_pending: bool,
+	avatar_preview: Option<egui::TextureHandle>,
+	avatar_error: Option<&'static str>,
 }
 impl IntegrationsUi {
 	pub fn for_channel(channel: Id) -> Self {
@@ -66,7 +72,48 @@ impl IntegrationsUi {
 		};
 	}
 	pub fn has_changes(&self) -> bool {
-		self.draft != self.baseline || self.submitted
+		self.draft != self.baseline || self.submitted || self.avatar_pending
+	}
+	/// Takes the pending avatar picker request and tags it with `request`.
+	pub fn take_avatar_request(&mut self, request: u64) -> bool {
+		if !std::mem::take(&mut self.avatar_requested) {
+			return false;
+		}
+		self.avatar_request = request;
+		true
+	}
+	pub fn waits_for_avatar(&self, request: u64) -> bool {
+		self.avatar_pending && self.avatar_request == request
+	}
+	pub fn accept_avatar(
+		&mut self,
+		ctx: &egui::Context,
+		request: u64,
+		result: Result<Option<(String, egui::ColorImage)>, &'static str>,
+	) {
+		if !self.waits_for_avatar(request) {
+			return;
+		}
+		self.avatar_pending = false;
+		let Some(draft) = &mut self.draft else {
+			return;
+		};
+		match result {
+			Ok(Some((uri, image)))
+				if model::server_integrations::valid_avatar(&Patch::Value(uri.clone())) =>
+			{
+				draft.avatar = Patch::Value(uri);
+				self.avatar_preview = Some(ctx.load_texture(
+					"webhook-avatar-draft",
+					image,
+					egui::TextureOptions::LINEAR,
+				));
+				self.avatar_error = None;
+			}
+			Ok(Some(_)) => self.avatar_error = Some("server-integrations-error-avatar-too-large"),
+			Ok(None) => {}
+			Err(error) => self.avatar_error = Some(error),
+		}
 	}
 	/// Overview and the webhook lists virtualize their own rows, so they own the page scroll.
 	/// The editor form is short and scrolls with the settings content instead.
@@ -325,9 +372,7 @@ impl IntegrationsUi {
 				self.submitted = saving;
 				self.error = None;
 			} else {
-				self.error = Some(
-					"Could not update integrations. Check your permissions and connection, then reload.",
-				);
+				self.error = Some("server-integrations-error-update");
 			}
 		}
 	}
@@ -549,6 +594,7 @@ impl IntegrationsUi {
 					id: None,
 					name: crate::i18n::translate("page-updates"),
 					channel: Some(channel.id),
+					avatar: Patch::Absent,
 				});
 				self.baseline = None;
 				self.page = Page::Editor;
@@ -626,6 +672,7 @@ impl IntegrationsUi {
 										id: Some(webhook.id),
 										name: webhook.name.clone().unwrap_or_default(),
 										channel: webhook.channel,
+										avatar: Patch::Absent,
 									};
 									self.baseline = Some(draft.clone());
 									self.draft = Some(draft);
@@ -817,7 +864,53 @@ impl IntegrationsUi {
 		let Some(draft) = &mut self.draft else {
 			return;
 		};
+		if !matches!(draft.avatar, Patch::Value(_)) {
+			self.avatar_preview = None;
+		}
 		ui.add_space(12.0);
+		let current_avatar = draft.id.and_then(|id| {
+			state
+				.server_admin
+				.integrations
+				.as_ref()?
+				.webhooks
+				.as_ref()?
+				.iter()
+				.find(|w| w.id == id)?
+				.avatar
+				.clone()
+		});
+		ui.horizontal_top(|ui| {
+		ui.vertical(|ui| {
+			ui.set_width(96.0);
+			let user = model::User {
+				kind: model::AccountKind::Bot,
+				webhook: true,
+				id: draft.id.unwrap_or(Id(1)),
+				name: draft.name.clone(),
+				avatar: current_avatar,
+				discriminator: 0,
+				primary_guild: None,
+				cosmetics: None,
+			};
+			if avatar_picker(ui, state, &user, self.avatar_preview.as_ref(), avatars)
+				.clicked() && !self.avatar_pending
+				&& writable(state)
+			{
+				self.avatar_requested = true;
+				self.avatar_pending = true;
+				self.avatar_error = None;
+			}
+			ui.label(
+				RichText::new(crate::i18n::translate(
+					"server-integrations-editor-minimum-size",
+				))
+				.size(11.0)
+				.color(design::palette(ui).muted),
+			);
+		});
+		ui.add_space(16.0);
+		ui.vertical(|ui| {
 		let label = design::label(
 			ui,
 			&crate::i18n::translate("server-integrations-editor-name"),
@@ -876,6 +969,11 @@ impl IntegrationsUi {
 					);
 				}
 			});
+		});
+		});
+		if let Some(error) = self.avatar_error {
+			design::notice(ui, design::Level::Error, error);
+		}
 		ui.add_space(24.0);
 		let save = draft.channel.map(|channel| match draft.id {
 			Some(webhook) => Action::EditWebhook {
@@ -883,11 +981,13 @@ impl IntegrationsUi {
 				webhook,
 				channel,
 				name: draft.name.clone(),
+				avatar: draft.avatar.clone(),
 			},
 			None => Action::CreateWebhook {
 				scope: self.channel,
 				channel,
 				name: draft.name.clone(),
+				avatar: draft.avatar.clone(),
 			},
 		});
 		let valid = save.as_ref().is_some_and(|a| allowed(state, guild, a));
@@ -920,6 +1020,8 @@ impl IntegrationsUi {
 				.clicked()
 			{
 				self.draft.clone_from(&self.baseline);
+				self.avatar_preview = None;
+				self.avatar_error = None;
 				if self.draft.is_none() {
 					self.page = Page::Webhooks;
 				}
@@ -944,24 +1046,25 @@ impl IntegrationsUi {
 		let mut confirm = dialog::Confirm::new(
 			"delete-server-integration",
 			if integration {
-				"Remove integration?"
+				"server-integrations-remove-title"
 			} else {
-				"Delete webhook?"
+				"server-integrations-delete-webhook-title"
 			},
-			if integration {
-				format!(
-					"Removing {} also removes its bot and every webhook it owns from this server.",
-					deletion.name
-				)
-			} else {
-				format!(
-					"{} will stop delivering messages. A followed channel will also stop sending posts to this server.",
-					deletion.name
-				)
-			},
+			crate::i18n::translate_args(
+				if integration {
+					"server-integrations-remove-message"
+				} else {
+					"server-integrations-delete-webhook-message"
+				},
+				&[("name", &deletion.name)],
+			),
 		)
 		.danger()
-		.confirm_label(if integration { "Remove" } else { "Delete" })
+		.confirm_label(if integration {
+			"extensions-ui-card-body-remove"
+		} else {
+			"dialog-module-delete"
+		})
 		.enabled(writable(state));
 		if let Some(error) = state.server_admin.error {
 			confirm = confirm.note(dialog::Level::Error, error);
@@ -1016,7 +1119,10 @@ fn webhook_identity(ui: &mut egui::Ui, state: &State, webhook: &Webhook, avatars
 			let destination = webhook
 				.channel
 				.and_then(|id| state.channel(id))
-				.map_or("Unknown channel", |c| c.name.as_str());
+				.map_or_else(
+					|| crate::i18n::translate("server-integrations-unknown-channel"),
+					|c| c.name.clone(),
+				);
 			ui.add(
 				egui::Label::new(
 					RichText::new(format!("#{destination}"))
@@ -1027,6 +1133,47 @@ fn webhook_identity(ui: &mut egui::Ui, state: &State, webhook: &Webhook, avatars
 			);
 		});
 	});
+}
+/// The webhook avatar as an 80 px upload target with a corner badge.
+fn avatar_picker(
+	ui: &mut egui::Ui,
+	state: &State,
+	user: &model::User,
+	preview: Option<&egui::TextureHandle>,
+	avatars: &mut Avatars,
+) -> egui::Response {
+	const SIZE: f32 = 80.0;
+	let rect = if let Some(texture) = preview {
+		let (rect, _) = ui.allocate_exact_size(Vec2::splat(SIZE), egui::Sense::hover());
+		egui::Image::from_texture(texture)
+			.corner_radius(SIZE / 2.0)
+			.paint_at(ui, rect);
+		rect
+	} else {
+		avatars.show_plain(ui, user, SIZE, state.demo).rect
+	};
+	let response = ui
+		.interact(
+			rect,
+			ui.scope_id().with("webhook-avatar"),
+			egui::Sense::click(),
+		)
+		.on_hover_cursor(egui::CursorIcon::PointingHand)
+		.on_hover_text(crate::i18n::translate(
+			"server-integrations-editor-upload-avatar",
+		));
+	let colors = design::palette(ui);
+	let badge =
+		egui::Rect::from_center_size(rect.right_top() + Vec2::new(-10.0, 10.0), Vec2::splat(22.0));
+	ui.painter()
+		.circle_filled(badge.center(), 11.0, colors.text_strong);
+	icons::paint(
+		ui.painter(),
+		icons::Icon::Image,
+		badge.shrink(5.0),
+		colors.raised,
+	);
+	response
 }
 fn primary(ui: &mut egui::Ui, text: &str, enabled: bool) -> egui::Response {
 	ui.add_enabled_ui(enabled, |ui| {
@@ -1429,6 +1576,7 @@ mod tests {
 			id: None,
 			name: "Updates".into(),
 			channel: None,
+			avatar: Patch::Absent,
 		};
 		let mut view = IntegrationsUi {
 			page: Page::Editor,

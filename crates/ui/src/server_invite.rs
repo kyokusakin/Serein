@@ -46,9 +46,9 @@ impl InviteDialog {
 		let mut close = false;
 		let settings_open = self.settings.is_some();
 		let title = if settings_open {
-			"Invite Link Settings".to_owned()
+			crate::i18n::translate("server-invite-settings-title")
 		} else {
-			format!("Invite friends to {name}")
+			crate::i18n::translate_args("server-invite-title", &[("name", name)])
 		};
 		let response = crate::dialog::Dialog::new("server-invite-dialog", title)
 			.subtitle(crate::i18n::translate_if_key(if settings_open {
@@ -420,14 +420,16 @@ impl InviteDialog {
 				ui.set_width(ui.available_width());
 				let link = state.created_invite(guild).map(str::to_owned);
 				let pending = state.server_action_pending();
-				let text = link.clone().unwrap_or_else(|| {
-					if pending {
-						"Creating invite link…"
-					} else {
-						"Create a link to share"
-					}
-					.to_owned()
-				});
+				let text = link
+					.as_deref()
+					.map(crate::invites::shown)
+					.unwrap_or_else(|| {
+						crate::i18n::translate(if pending {
+							"server-invite-creating-link"
+						} else {
+							"server-invite-create-link-hint"
+						})
+					});
 				// Right to left: the action sits at the edge and the link fills the rest.
 				// A fixed row height keeps the centred cross axis from claiming the dialog.
 				ui.allocate_ui_with_layout(
@@ -435,11 +437,15 @@ impl InviteDialog {
 					egui::Layout::right_to_left(egui::Align::Center),
 					|ui| {
 						let label = if link.is_some() {
-							if self.copied { "Copied" } else { "Copy" }
+							if self.copied {
+								"updates-update-settings-copied"
+							} else {
+								"updates-update-settings-copy"
+							}
 						} else if pending {
-							"Creating…"
+							"server-invite-settings-generating"
 						} else {
-							"Create link"
+							"server-invite-create-link"
 						};
 						if ui
 							.add_enabled_ui(!pending && channel.is_some(), |ui| {

@@ -120,16 +120,11 @@ impl DiscordApi {
 				"Interaction unavailable while reconnecting",
 			))?;
 		let (kind, mut data) = match &request.data {
-			Data::ApplicationCommand { invocation } => {
-				let command = &invocation.command;
-				let mut data = json!({"type":1,"id":command.id,"version":command.version,
-					"name":command.name,"application_command":command,"options":invocation.options,
-					"attachments":[]});
-				if let Some(guild) = command.guild_id {
-					data["guild_id"] = json!(guild);
-				}
-				(2, data)
-			}
+			Data::ApplicationCommand { invocation } => (2, command_data(invocation)),
+			Data::Autocomplete {
+				invocation,
+				focused,
+			} => (4, autocomplete_data(invocation, focused)?),
 			Data::Component {
 				custom_id,
 				component_type,
@@ -183,6 +178,43 @@ impl DiscordApi {
 			.await
 			.map(|_| ())
 	}
+}
+
+fn command_data(invocation: &model::application_commands::Invocation) -> Value {
+	let command = &invocation.command;
+	let mut data = json!({"type":1,"id":command.id,"version":command.version,
+		"name":command.name,"application_command":command,"options":invocation.options,
+		"attachments":[]});
+	if let Some(guild) = command.guild_id {
+		data["guild_id"] = json!(guild);
+	}
+	data
+}
+
+/// Unofficial: the client marks the option being typed with `focused` at the selected
+/// subcommand.
+fn autocomplete_data(
+	invocation: &model::application_commands::Invocation,
+	focused: &str,
+) -> Result<Value, Failure> {
+	let mut data = command_data(invocation);
+	let mut depth = 0;
+	let mut options = &data["options"];
+	while let Some([branch]) = options.as_array().map(Vec::as_slice)
+		&& branch.get("value").is_none()
+	{
+		depth += 1;
+		options = &branch["options"];
+	}
+	let mut options = &mut data["options"];
+	for _ in 0..depth {
+		options = &mut options[0]["options"];
+	}
+	options
+		.as_array_mut()
+		.and_then(|leaf| leaf.iter_mut().find(|o| o["name"] == focused))
+		.ok_or(Failure::Protocol)?["focused"] = json!(true);
+	Ok(data)
 }
 
 pub(crate) fn valid_file_types(request: &Request, sources: &[crate::upload::Source]) -> bool {
@@ -414,6 +446,11 @@ mod tests {
 					}],
 				}],
 			};
+			let suggest = autocomplete_data(&invocation, "label").unwrap();
+			let leaf = &suggest["options"][0]["options"][0]["options"];
+			assert_eq!(leaf[0]["focused"], true);
+			assert!(leaf[1].get("focused").is_none());
+			assert!(autocomplete_data(&invocation, "utility").is_err());
 			let request = Request {
 				request: 8,
 				nonce: "123".into(),

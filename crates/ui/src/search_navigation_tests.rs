@@ -508,6 +508,7 @@ fn pane_frame(
 /// result's text, ID or link, and that a plugin message action is requested for that message.
 #[test]
 fn result_context_menu_copies_and_offers_plugin_message_actions() {
+	crate::set_developer_mode(true);
 	let ctx = egui::Context::default();
 	let mut state = state();
 	let mut view = MessagingUi::default();
@@ -644,6 +645,7 @@ fn result_context_menu_copies_and_offers_plugin_message_actions() {
 /// as the preview-limit notice offers its link and ID but no text copy or plugin actions.
 #[test]
 fn result_menu_withholds_text_actions_for_the_preview_notice() {
+	crate::set_developer_mode(true);
 	let ctx = egui::Context::default();
 	let mut state = state();
 	let mut view = MessagingUi::default();

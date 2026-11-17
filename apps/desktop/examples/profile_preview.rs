@@ -105,6 +105,7 @@ impl eframe::App for Preview {
 					guild,
 					request,
 					action,
+					..
 				} => server_settings_demo::execute_admin(&self.state, guild, request, *action),
 				client_core::Command::ServerSettings {
 					guild,
@@ -1381,6 +1382,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 						guild,
 						request,
 						action,
+						..
 					}) = messaging.preview_server_admin(
 						&mut state,
 						model::Id(10),

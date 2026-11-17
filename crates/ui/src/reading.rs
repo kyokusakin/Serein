@@ -79,8 +79,6 @@ impl MessagingUi {
 			"reading-layout-settings-reset-layout",
 		);
 		design::card(ui, |ui| {
-			self.zoom_row(ui, &mut value);
-			ui.add_space(10.0);
 			design::slider_row(
 				ui,
 				"reading-layout-settings-sidebar-width",
@@ -106,7 +104,6 @@ impl MessagingUi {
 		});
 		if reset {
 			let defaults = ReadingPreferences::default();
-			value.zoom_percent = defaults.zoom_percent;
 			value.sidebar_width = defaults.sidebar_width;
 			value.show_members = defaults.show_members;
 			value.show_members_dms = defaults.show_members_dms;
@@ -127,13 +124,6 @@ impl MessagingUi {
 			"reading-chat-reading-settings-reset-chat",
 		);
 		design::card(ui, |ui| {
-			design::switch(
-				ui,
-				"reading-chat-reading-settings-animate-gifs",
-				Some("reading-chat-reading-settings-visible-chat-gifs-play-automatically"),
-				&mut value.animate_gifs,
-			);
-			design::card_divider(ui);
 			design::switch(
 				ui,
 				"reading-chat-reading-settings-hide-image-and-gif-links",
@@ -158,13 +148,6 @@ impl MessagingUi {
 					&mut self.hide_ignored_messages,
 				);
 			});
-			design::card_divider(ui);
-			design::switch(
-				ui,
-				"reading-chat-reading-settings-compact-message-spacing",
-				Some("reading-chat-reading-settings-tighter-gaps-between-message-groups"),
-				&mut value.compact_messages,
-			);
 			design::card_divider(ui);
 			design::switch(
 				ui,
@@ -233,11 +216,9 @@ impl MessagingUi {
 		);
 		if reset {
 			let defaults = ReadingPreferences::default();
-			value.animate_gifs = defaults.animate_gifs;
 			value.hide_media_links = defaults.hide_media_links;
 			self.hide_blocked_messages = false;
 			self.hide_ignored_messages = false;
-			value.compact_messages = defaults.compact_messages;
 			value.double_click_reaction_enabled = defaults.double_click_reaction_enabled;
 			value.double_click_reaction = defaults.double_click_reaction;
 			value.confirm_external_links = defaults.confirm_external_links;
@@ -245,6 +226,42 @@ impl MessagingUi {
 			value.scroll_speed_percent = defaults.scroll_speed_percent;
 			self.reading_save_requested = true;
 		}
+		self.reading_save_notice(ui, demo);
+		if value != self.reading_preferences {
+			self.apply_reading_preferences(ui.ctx(), value);
+		}
+	}
+
+	/// Accessibility > Visual Density: message group spacing and zoom.
+	pub(crate) fn density_settings(&mut self, ui: &mut egui::Ui, demo: bool) {
+		let mut value = self.reading_preferences;
+		design::card(ui, |ui| {
+			design::switch(
+				ui,
+				"reading-chat-reading-settings-compact-message-spacing",
+				Some("reading-chat-reading-settings-tighter-gaps-between-message-groups"),
+				&mut value.compact_messages,
+			);
+			design::card_divider(ui);
+			self.zoom_row(ui, &mut value);
+		});
+		self.reading_save_notice(ui, demo);
+		if value != self.reading_preferences {
+			self.apply_reading_preferences(ui.ctx(), value);
+		}
+	}
+
+	/// Accessibility > Reduced Motion: whether chat GIFs play on their own.
+	pub(crate) fn motion_settings(&mut self, ui: &mut egui::Ui, demo: bool) {
+		let mut value = self.reading_preferences;
+		design::card(ui, |ui| {
+			design::switch(
+				ui,
+				"reading-chat-reading-settings-animate-gifs",
+				Some("reading-chat-reading-settings-visible-chat-gifs-play-automatically"),
+				&mut value.animate_gifs,
+			);
+		});
 		self.reading_save_notice(ui, demo);
 		if value != self.reading_preferences {
 			self.apply_reading_preferences(ui.ctx(), value);
@@ -368,6 +385,14 @@ mod tests {
 			confirm_external_links: true,
 		};
 		view.apply_reading_preferences(&ctx, custom);
+		// Zoom, animated GIFs and compact spacing live on the Accessibility page, outside these
+		// resets.
+		let after_reset = ReadingPreferences {
+			zoom_percent: custom.zoom_percent,
+			animate_gifs: custom.animate_gifs,
+			compact_messages: custom.compact_messages,
+			..ReadingPreferences::default()
+		};
 		for _ in 0..3 {
 			frame(&mut view, vec![]);
 		}
@@ -441,7 +466,7 @@ mod tests {
 					);
 				}
 			}
-			assert_eq!(view.reading_preferences, ReadingPreferences::default());
+			assert_eq!(view.reading_preferences, after_reset);
 			assert!(
 				std::mem::take(&mut view.reading_save_requested),
 				"Even an already-default reset overrides a pending startup load"
@@ -484,6 +509,6 @@ mod tests {
 				..custom
 			},
 		);
-		assert_eq!(view.reading_preferences, ReadingPreferences::default());
+		assert_eq!(view.reading_preferences, after_reset);
 	}
 }

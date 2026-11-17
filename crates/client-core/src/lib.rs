@@ -32,10 +32,13 @@ pub mod reactions;
 pub mod read_state;
 mod replies;
 pub use replies::{HistoryNavigation, LinkResolution, ParkedReplies, Reply, ReplyDeletions};
+pub mod account_data;
 pub mod channel_list;
+pub mod discovery;
 pub mod group_actions;
 pub mod onboarding;
 pub mod resident;
+pub mod scheduled_events;
 pub mod screen;
 pub mod search;
 pub mod server_actions;
@@ -45,6 +48,7 @@ pub mod server_integrations;
 pub mod server_roles;
 pub mod server_settings;
 pub mod slowmode;
+pub mod soundboard;
 pub mod thread_previews;
 mod thread_starter;
 mod threads;
@@ -80,6 +84,19 @@ pub enum Command {
 	Polls(polls::Request),
 	StickerPacks,
 	Sticker(Id),
+	ScheduledEvents {
+		guild: Id,
+		request: u64,
+	},
+	Discovery {
+		query: String,
+		request: u64,
+	},
+	AccountData {
+		section: model::account_data::Section,
+		request: u64,
+	},
+	Soundboard(soundboard::Command),
 	Interaction(interactions::Request),
 	ApplicationCommands {
 		channel: Id,
@@ -101,6 +118,9 @@ pub enum Command {
 		guild: Id,
 		request: u64,
 		action: Box<model::server_admin::Action>,
+		/// The signed-in account. Discord changes this account's own nickname only through the
+		/// current-member route, which needs Change Nickname rather than Manage Nicknames.
+		account: Option<Id>,
 	},
 	ServerSettings {
 		guild: Id,
@@ -270,6 +290,13 @@ pub enum Command {
 		channel: Id,
 		user: Id,
 		request: u64,
+	},
+	/// One JPEG thumbnail of this account's own stream, shown to others before they join.
+	UploadStreamPreview {
+		guild: Option<Id>,
+		channel: Id,
+		user: Id,
+		jpeg: Vec<u8>,
 	},
 	/// None loads the account's global profile; Some writes only explicitly changed fields.
 	EditProfile {
@@ -564,6 +591,20 @@ pub enum Event {
 		request: u64,
 		result: Result<thread_previews::Loaded, auth::Failure>,
 	},
+	ScheduledEvents {
+		guild: Id,
+		request: u64,
+		result: Result<model::scheduled_events::Snapshot, auth::Failure>,
+	},
+	Discovery {
+		request: u64,
+		result: Result<model::discovery::Page, auth::Failure>,
+	},
+	AccountData {
+		request: u64,
+		result: Result<model::account_data::Data, auth::Failure>,
+	},
+	Soundboard(soundboard::Event),
 	ForumSummaries {
 		request: u64,
 		results: Vec<(Id, Result<model::forum::Summary, auth::Failure>)>,
@@ -608,6 +649,7 @@ pub enum Event {
 		request: u64,
 		result: Result<String, auth::Failure>,
 	},
+	StreamPreviewUploaded(Result<(), auth::Failure>),
 	BadgeSettings {
 		request: u64,
 		result: Result<model::badges::BadgeSettings, auth::Failure>,
@@ -802,6 +844,10 @@ pub struct State {
 	pub archived_thread: Option<Id>,
 	pub thread_starter: thread_starter::Starter,
 	pub thread_previews: thread_previews::Previews,
+	pub scheduled_events: scheduled_events::Events,
+	pub discovery: discovery::Discovery,
+	pub account_data: account_data::AccountData,
+	pub soundboard: soundboard::Soundboard,
 	pub search: Option<search::SearchView>,
 	pub search_request: u64,
 	pub gifs: gifs::Gifs,
@@ -1050,6 +1096,10 @@ impl Default for State {
 			archived_thread: None,
 			thread_starter: Default::default(),
 			thread_previews: Default::default(),
+			scheduled_events: Default::default(),
+			discovery: Default::default(),
+			account_data: Default::default(),
+			soundboard: Default::default(),
 			search: None,
 			search_request: 0,
 			gifs: gifs::Gifs::default(),
@@ -2358,6 +2408,38 @@ impl State {
 			self.apply_thread_preview(thread, request, Err(auth::Failure::Capacity));
 			return;
 		}
+		if let Command::ScheduledEvents { guild, request } = command {
+			self.apply_scheduled_events(guild, request, Err(auth::Failure::Capacity));
+			return;
+		}
+		if let Command::Discovery { request, .. } = command {
+			self.apply_discovery(request, Err(auth::Failure::Capacity));
+			return;
+		}
+		if let Command::AccountData { request, .. } = command {
+			self.apply_account_data(request, Err(auth::Failure::Capacity));
+			return;
+		}
+		if let Command::Soundboard(command) = command {
+			let failed = Err(auth::Failure::Capacity);
+			match command {
+				soundboard::Command::Settings { request }
+				| soundboard::Command::Save { request, .. } => {
+					self.apply_soundboard(soundboard::Event::Settings {
+						request,
+						result: failed,
+					});
+				}
+				soundboard::Command::Sounds { guild } => {
+					self.apply_soundboard(soundboard::Event::Sounds {
+						guild,
+						result: Err(auth::Failure::Capacity),
+					});
+				}
+				soundboard::Command::Send { .. } => {}
+			}
+			return;
+		}
 		if let Command::ForumSummaries { channels, request } = command {
 			self.apply_forum_summaries(
 				request,
@@ -2764,7 +2846,10 @@ impl State {
 			}
 			return;
 		}
-		if matches!(envelope.event, Event::TypingSent(_)) {
+		if matches!(
+			envelope.event,
+			Event::TypingSent(_) | Event::StreamPreviewUploaded(_)
+		) {
 			return;
 		}
 		if let Event::DirectPresence(updates) = &envelope.event {
@@ -3003,6 +3088,26 @@ impl State {
 				result,
 			} => {
 				self.apply_thread_preview(thread, request, result);
+				Ok(())
+			}
+			Event::ScheduledEvents {
+				guild,
+				request,
+				result,
+			} => {
+				self.apply_scheduled_events(guild, request, result);
+				Ok(())
+			}
+			Event::Discovery { request, result } => {
+				self.apply_discovery(request, result);
+				Ok(())
+			}
+			Event::Soundboard(event) => {
+				self.apply_soundboard(event);
+				Ok(())
+			}
+			Event::AccountData { request, result } => {
+				self.apply_account_data(request, result);
 				Ok(())
 			}
 			Event::ForumSummaries { request, results } => {
@@ -3524,7 +3629,8 @@ impl State {
 			Event::MemberPresence { .. }
 			| Event::DirectPresence(_)
 			| Event::SharedGuildPresence(_)
-			| Event::TypingSent(_) => {
+			| Event::TypingSent(_)
+			| Event::StreamPreviewUploaded(_) => {
 				unreachable!("presence handled before timeline revision")
 			}
 			Event::MemberSearch { request, result } => {
@@ -4621,6 +4727,16 @@ impl Event {
 				Self::ThreadPreview { result, .. } => {
 					result.as_ref().map_or(0, thread_previews::Loaded::bytes)
 				}
+				Self::ScheduledEvents { result, .. } => result
+					.as_ref()
+					.map_or(0, model::scheduled_events::Snapshot::bytes),
+				Self::Discovery { result, .. } => {
+					result.as_ref().map_or(0, model::discovery::Page::bytes)
+				}
+				Self::AccountData { result, .. } => {
+					result.as_ref().map_or(0, model::account_data::Data::bytes)
+				}
+				Self::Soundboard(event) => event.bytes(),
 				Self::ForumSummaries { results, .. } => {
 					results.capacity()
 						* size_of::<(Id, Result<model::forum::Summary, auth::Failure>)>()

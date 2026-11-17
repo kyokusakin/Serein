@@ -500,6 +500,60 @@ impl Command {
 				options: Vec::new(),
 			});
 		}
+		let invocation = Invocation {
+			command: self.clone(),
+			options: self.nest(path, options),
+		};
+		if !invocation.valid() {
+			return Err("Command submission exceeds its limits");
+		}
+		Ok(invocation)
+	}
+	/// The partial command an application completes: the focused option's text as typed,
+	/// plus every other value that already parses.
+	pub fn autocomplete(
+		&self,
+		path: &[String],
+		values: &[(String, String)],
+		focused: &str,
+	) -> Result<Invocation, &'static str> {
+		if !self.valid() || values.len() > 25 {
+			return Err("Invalid command schema or too many values");
+		}
+		let mut options = Vec::new();
+		for option in self.options_at(path)? {
+			let text = values
+				.iter()
+				.find(|(name, _)| *name == option.name)
+				.map_or("", |(_, text)| text.as_str());
+			let value = if option.name == focused {
+				if !option.autocomplete || text.chars().count() > 6000 {
+					return Err("This option has no suggestions");
+				}
+				Value::String(text.to_owned())
+			} else {
+				match option.parse(text) {
+					Ok(value) if !text.is_empty() => value,
+					_ => continue,
+				}
+			};
+			options.push(Argument {
+				kind: option.kind,
+				name: option.name.clone(),
+				value: Some(value),
+				options: Vec::new(),
+			});
+		}
+		let invocation = Invocation {
+			command: self.clone(),
+			options: self.nest(path, options),
+		};
+		if !invocation.autocompletes(focused) {
+			return Err("Command submission exceeds its limits");
+		}
+		Ok(invocation)
+	}
+	fn nest(&self, path: &[String], mut options: Vec<Argument>) -> Vec<Argument> {
 		for depth in (0..path.len()).rev() {
 			let mut branch = &self.options;
 			for part in &path[..depth] {
@@ -513,14 +567,7 @@ impl Command {
 				options,
 			}];
 		}
-		let invocation = Invocation {
-			command: self.clone(),
-			options,
-		};
-		if !invocation.valid() {
-			return Err("Command submission exceeds its limits");
-		}
-		Ok(invocation)
+		options
 	}
 }
 
@@ -562,12 +609,56 @@ impl Argument {
 }
 impl Invocation {
 	pub fn valid(&self) -> bool {
-		self.command.valid()
-			&& arguments_valid(&self.command.options, &self.options)
-			&& self.command.wire_bytes()
-				+ self.options.iter().map(Argument::wire_bytes).sum::<usize>()
-				+ 1024 <= MAX_SUBMISSION_BYTES
+		self.command.valid() && arguments_valid(&self.command.options, &self.options) && self.fits()
 	}
+	/// Whether this partial command asks for suggestions for `focused`, an autocomplete
+	/// option at the selected subcommand.
+	pub fn autocompletes(&self, focused: &str) -> bool {
+		let (mut schema, mut values) = (&self.command.options, &self.options);
+		while let [branch] = values.as_slice()
+			&& branch.value.is_none()
+		{
+			let Some(option) = schema
+				.iter()
+				.find(|o| o.kind <= 2 && o.name == branch.name && o.kind == branch.kind)
+			else {
+				return false;
+			};
+			(schema, values) = (&option.options, &branch.options);
+		}
+		self.command.valid()
+			&& self.fits()
+			&& values.len() <= 25
+			&& values.iter().all(|value| {
+				value.options.is_empty()
+					&& schema
+						.iter()
+						.any(|o| o.kind > 2 && o.name == value.name && o.kind == value.kind)
+			}) && values.iter().any(|value| {
+			value.name == focused
+				&& matches!(value.value, Some(Value::String(_)))
+				&& schema.iter().any(|o| o.name == focused && o.autocomplete)
+		})
+	}
+	fn fits(&self) -> bool {
+		self.command.wire_bytes()
+			+ self.options.iter().map(Argument::wire_bytes).sum::<usize>()
+			+ 1024 <= MAX_SUBMISSION_BYTES
+	}
+}
+
+/// Discord lists at most 25 suggestions, each named and valued in at most 100 characters.
+pub fn valid_suggestions(choices: &[Choice]) -> bool {
+	choices.len() <= 25
+		&& choices.iter().all(|choice| {
+			description(&choice.name)
+				&& match &choice.value {
+					Value::String(value) => value.chars().count() <= 100,
+					Value::Integer(_) => true,
+					Value::Number(value) => value.is_finite(),
+					Value::Boolean(_) => false,
+				}
+		})
 }
 
 pub fn catalog_bytes(commands: &[Command]) -> usize {

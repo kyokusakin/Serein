@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Rebuild the bundled Phosphor icon atlas (development only).
+"""Rebuild the bundled icon atlas (development only).
 
-Downloads the version-pinned SVG sources, verifies every file hash, composes one SVG grid and
+Reads the Discord glyphs under `assets/icons/discord/`, downloads the version-pinned Phosphor and
+Simple Icons sources, verifies every file hash, composes one SVG grid and
 rasterizes it with the `resvg` command-line tool. Requires `resvg` 0.45.1 on PATH or `--resvg`:
 
     cargo install resvg --version 0.45.1 --root /tmp/resvg-tool
@@ -21,50 +22,50 @@ BASE = f"https://cdn.jsdelivr.net/npm/@phosphor-icons/core@{VERSION}"
 COLUMNS, CELL, PAD = 8, 64, 4
 GLYPH = CELL - 2 * PAD
 
-# Repository-local artwork, rasterized from the repository instead of an upstream package.
-# `assets/icons/thread.svg` is the thread glyph and `assets/icons/monitor-x.svg` the stop-sharing
-# glyph; both are listed inline below.
+# Repository-local artwork, rasterized from the repository instead of an upstream package:
+# the Serein mark and the Discord interface glyphs in `assets/icons/discord/`.
 BRAND_MARK = "repo:assets/brand/serein-mark.svg"
 
-# name, upstream asset, SHA-256 of the unmodified SVG file.
+# name, source asset, SHA-256 of the unmodified SVG file. Cell order is part of the atlas
+# contract: the Windows tray reads cells 4, 6 and 58 directly.
 ICONS = [
-    ("caret-down", "bold/caret-down-bold.svg", "76a97545e1b923bc13bcc15d7bcbb7f5530105e6eaa98a18c1e30d23e3622843"),
-    ("caret-right", "bold/caret-right-bold.svg", "03cadd956d715541432ec8dc2eda1c53ca341af7d3ccecb8dd32c5b9747e290f"),
-    ("gear", "fill/gear-six-fill.svg", "dc303bf88571d9aa8d56c30d2630303aa7aba4ca21c21010be3549d6c17666ce"),
-    ("microphone", "fill/microphone-fill.svg", "cd8446012357f05a70679ecc792402aa6e49f1fdc820b04035a97b213a2f17a6"),
-    ("microphone-slash", "fill/microphone-slash-fill.svg", "6970ccb81d74ffe2165904bc4ed09e0dc738c5d4930192426afd24a5457a2202"),
-    ("headphones", "fill/headphones-fill.svg", "35db98ea0b59f4c8c81902d066a8f6db58680f99e48d1a36e6e167e3ef1a6751"),
-    ("headphones-slash", "fill/headphones-fill.svg", "35db98ea0b59f4c8c81902d066a8f6db58680f99e48d1a36e6e167e3ef1a6751"),
-    ("push-pin", "fill/push-pin-fill.svg", "b3a7a363401c6e09ccd0fc5a7f6813c3183dab69b07eaca3419acf2fafe942b3"),
-    ("users", "fill/users-fill.svg", "6104c0634ed5b574e261acc05a3575db8abfb4ccbcb3bf12f5359a431303783b"),
-    ("user-plus", "fill/user-plus-fill.svg", "07fe0181040b8dd7956f8067f13f83d81ec395d54b1760392a5daf5692232652"),
-    ("user-circle", "fill/user-circle-fill.svg", "4e16cdba116195993e6398bb097e7c4b354fb129fafdf2b56fd4b7c069f440d3"),
-    ("magnifying-glass", "bold/magnifying-glass-bold.svg", "b73e393b20bff0aaee96b9e325d0276fe1ab5fc81b5080633a95827bd14ebae6"),
-    ("plus", "bold/plus-bold.svg", "3d20a4b2e00657baeb922bed94f13fbfa288968b738991d047dd252cb64005d8"),
-    ("plus-circle", "fill/plus-circle-fill.svg", "7e6b31bae705c568cb7ce2b42fca9d65f85da725bac30f207ee2ce6368abb6c5"),
-    ("x", "bold/x-bold.svg", "d540487912a267d83c495954b24ca07981002fda05ee2ea0b492d8fc188d1c3e"),
-    ("smiley", "fill/smiley-fill.svg", "2f993043ef4566931f5ad81be6d1030734d2dbad5e5d7c5d380debfeaeeb9399"),
-    ("bell", "fill/bell-fill.svg", "26437565edc7418a2c326a74078fb4519aa2316e84fcf1adefbdd1b2c89f4ac5"),
-    ("phone", "fill/phone-fill.svg", "4546c9d7d0a26f08ec5a35f2ca3e12d8ef76767ba60c2effa6f214d7f070dcb6"),
-    ("phone-call", "fill/phone-call-fill.svg", "6d67e611de99d8a33ba45f5d2a9e56d4123dcb9395020998a3b7250d3a08e36a"),
-    ("phone-disconnect", "fill/phone-disconnect-fill.svg", "15996d65a74424921e84c8e40e94fb43da650183476abb00b3d1498d2400ffc4"),
-    ("video-camera", "fill/video-camera-fill.svg", "daf72fb4e3f7978254c2ac1959db6d855f12bb0d9b7504309d2e6270b7192933"),
-    ("video-camera-slash", "fill/video-camera-slash-fill.svg", "1cb4bf1be6de46f024be49c324641afe36cfa5807f4846691851d8c954a5d0e4"),
-    ("monitor-arrow-up", "fill/monitor-arrow-up-fill.svg", "9519c0c4c734553167b598b03d493cdb6ef14f8df8c7283a1847699bcc33a0a8"),
-    ("rocket-launch", "fill/rocket-launch-fill.svg", "fed02fcf57da975870e6898085b8e469a695dafac38ddae2d92b169678c661a9"),
-    ("waveform", "fill/waveform-fill.svg", "fbbca82dbcc988184e314a671ac08517b4099540ab97605ae186998d9c0d3187"),
-    ("arrow-bend-up-left", "bold/arrow-bend-up-left-bold.svg", "b59c6a1dea610f669a69920bece2138108a54d88eaa9a1d0a20f82e1657c9f25"),
-    ("pencil-simple", "fill/pencil-simple-fill.svg", "b78e7b71cb19d43e235983a883d50ab78cf9227f9864106e1aa4f366ee317aa8"),
-    ("dots-three", "bold/dots-three-bold.svg", "5bd06c9754d075b409e3259350c9abc9ec106ffb3b6f3cd451f6419271163bc1"),
-    ("tray", "fill/tray-fill.svg", "8e0ed750696c01ef6e418436275501e4467c66b6f88688e1d0ac86e84a296b47"),
-    ("question", "fill/question-fill.svg", "91390e2c8d076dedcf73ec4ffc5ac6531dbf93aadac7e0907ba1cfb9e95a145b"),
-    ("arrow-clockwise", "bold/arrow-clockwise-bold.svg", "773d814cdf564a4d0db6e0408a60e5bd97c76c90293aaf383c72399ce2e034a1"),
-    ("chats", "fill/chats-fill.svg", "c88539cf3c42ef3a42f90d10e9c4736cbad59e2639948dbe647227e56160447b"),
-    ("speaker-high", "fill/speaker-high-fill.svg", "c266c407915382db3866570f816934b804c1b84bd47d971fad0e95ac5107dd6b"),
-    ("hash", "bold/hash-bold.svg", "8d2cb5e39903004da3d0a85a919adc6c76adcd65b3c9c1e8e355d8cf6cdf7193"),
-    ("chat-centered-text", "fill/chat-centered-text-fill.svg", "cc2c02e50a62aa98aae8634d518b2cc311413765ddfddae5908bf9168113d0a7"),
-    ("paper-plane-right", "fill/paper-plane-right-fill.svg", "a8e6f3a92755f1bc79bcfd691e794709bec6b13d68b948adc1eb035a2ddd8fff"),
-    ("arrow-square-out", "bold/arrow-square-out-bold.svg", "68348bacc7f539b8d73de92d7c120f22e424b4364374ccab01719ada8c8a12aa"),
+    ("caret-down", "repo:assets/icons/discord/chevron-small-down.svg", "4e3bf37ec7dae16dd23adcb571a58f19fa8ecd6775f13432d52dc703117d0ab2"),
+    ("caret-right", "repo:assets/icons/discord/chevron-small-right.svg", "81da3b8eed1d03a2eb5e6097f114fa81b8795259610d0cd8fcdd61656dcb8a45"),
+    ("gear", "repo:assets/icons/discord/settings.svg", "2796cfba1f700347dbbf44d7fa75679a2bc95baba9815ecab7de28bc19f88633"),
+    ("microphone", "repo:assets/icons/discord/microphone.svg", "789f88a4c3008052693f563a9e08306a2b20e458d3164296550c2aacd5ce0c60"),
+    ("microphone-slash", "repo:assets/icons/discord/microphone-slash.svg", "995f8551e9cd15e9334e854abd7de7307f6a2ed045c8d7a7a84cd00ccea4b038"),
+    ("headphones", "repo:assets/icons/discord/headphones.svg", "7da833af332a755a109fe8ace454cca570994e53f3d0d0e9b07a48357139629b"),
+    ("headphones-slash", "repo:assets/icons/discord/headphones-slash.svg", "d7e8df07f9d021ea5d5298b99edb3e9044d0b290f386441d217a78b4dcbb8116"),
+    ("push-pin", "repo:assets/icons/discord/pin.svg", "71530f85c570567e87bbbb880b8f23245fbbb4bd84c85742759f36d7cf9d1b2b"),
+    ("users", "repo:assets/icons/discord/group.svg", "9d9eab503d0d413371a685c335ac6a374777a7187d815c40115d34062dcfb650"),
+    ("user-plus", "repo:assets/icons/discord/user-plus.svg", "e2eacdbfd1ca9aea9375672b811783be15ce0e105882a2478853971e61d32f7f"),
+    ("user-circle", "repo:assets/icons/discord/user-circle.svg", "a0663446c6f9a6d6e524e8c059531642a4a1c448d34787c069a0e228cac61343"),
+    ("magnifying-glass", "repo:assets/icons/discord/magnifying-glass.svg", "bb19a64441cf6c4dbd9749687ab212fa2f8d9d9e55371e6c38fb745d0ea1cae0"),
+    ("plus", "repo:assets/icons/discord/plus-large.svg", "1fffde3ce18d25fbf1826e431aeceda6d98756bae9ea6029da5442a3c8785d49"),
+    ("plus-circle", "repo:assets/icons/discord/circle-plus.svg", "c09519bfcd7628ac0856d1cce63c3aaeb6cdd5dbc2e443c684ddea9316b5c846"),
+    ("x", "repo:assets/icons/discord/x-large.svg", "bfc53b2f329e489f0e7dda960357f1679dc2327149213d7d5598080864ce381b"),
+    ("smiley", "repo:assets/icons/discord/emoji-slightly-smiling-face.svg", "1ec9e90b606eef450357be8fbbbfad65f770cfd08f27ecc04097597e2057c174"),
+    ("bell", "repo:assets/icons/discord/bell.svg", "e876e85a88edd1d97c0964f460f757aaaa39a6c49b35df3c4454a2b9cd80a51f"),
+    ("phone", "repo:assets/icons/discord/phone-call.svg", "7517a982e128014d72c08270e1d9e1a5260b3f7daa455d30af18f11e5f5ee73d"),
+    ("phone-call", "repo:assets/icons/discord/phone.svg", "33605438a11d8d6b9dd7390ca1a4a7c8819e3d79931f800d7793f0d27afaf88a"),
+    ("phone-disconnect", "repo:assets/icons/discord/phone-hang-up.svg", "7587f1296a7446cbb9d112bb2c55732e2399d545ecc10bda13f689d291e415c6"),
+    ("video-camera", "repo:assets/icons/discord/video.svg", "b69470f3446d814c8b27af580c28d5cf4c2eacae2a88913cbca051bd4350218d"),
+    ("video-camera-slash", "repo:assets/icons/discord/video-slash.svg", "a6d3481738281c4546259970420f55bde02b2d849f0ccd553a2cac5e441ab3fd"),
+    ("monitor-arrow-up", "repo:assets/icons/discord/screen-arrow.svg", "f5ab78188268d427d3b6bc9fbe6604ace7b212d28a76b9895e3492546a277f56"),
+    ("rocket-launch", "repo:assets/icons/discord/activities.svg", "4680351a09fc5ff7d183d3ce0a7cbfcfad7ffc4e59bb000811bc9bafb984c905"),
+    ("waveform", "repo:assets/icons/discord/soundboard.svg", "36ed2a18910fad83fa9ec7d02a3c2b472d68826bf84561e7327e165cdae01f37"),
+    ("arrow-bend-up-left", "repo:assets/icons/discord/arrow-angle-left-up.svg", "6d2b351fbb63582c8cf829160ec1208b5fb80b471d803a32908f044c4592b449"),
+    ("pencil-simple", "repo:assets/icons/discord/pencil.svg", "d6078761ceebaf9e05779c885fa6705daded0833d2792a5cc4acc8fdb8e8c866"),
+    ("dots-three", "repo:assets/icons/discord/more-horizontal.svg", "6a25e38bda8ece5961b826736caa2ecafc205f1f0f7d2e6fae73446f114e3c44"),
+    ("tray", "repo:assets/icons/discord/inbox.svg", "03f61c2e726bd403dcc5af90d49f568d7a596fbca1632830e26bbb123244d704"),
+    ("question", "repo:assets/icons/discord/circle-question.svg", "1b59c1f0adccc4424f71255490f8ea352909097634b323a28d38ce0d726d2682"),
+    ("arrow-clockwise", "repo:assets/icons/discord/refresh.svg", "c0a0a6344dba78f39790f21703cb5650909f8d2db87278295ff2be72db982610"),
+    ("chats", "repo:assets/icons/discord/thread.svg", "99e4b49d90b586a7dc4316e2d349a6926a9dd6330e7837e3490afdfad1ffd122"),
+    ("speaker-high", "repo:assets/icons/discord/voice-normal.svg", "98bf1bb0846f3f9c3040ac335ec7b3d90e0569d74887bcb491ebf76f2c6b1f9f"),
+    ("hash", "repo:assets/icons/discord/text.svg", "aadeeffa12fb94b1cb403e2df1b119affd7c08e1826497d574c1e67b5895af70"),
+    ("chat-centered-text", "repo:assets/icons/discord/forum.svg", "afbf565c8f2ddcd598afb0a72db79b3d33e8d50d3ae34cb8483940a8f5528ef4"),
+    ("paper-plane-right", "repo:assets/icons/discord/send-message.svg", "413382409490a0a9a4c1cdd43461bb09af5d77b9ea4280443c1319d834c83525"),
+    ("arrow-square-out", "repo:assets/icons/discord/link-external-small.svg", "fd6f2226f49b3413734ba4285b18c2af67fdb0b2e5940179aae00cc188cd6928"),
     ("github-logo", "fill/github-logo-fill.svg", "35b2036490005bcb95a68d07d43d441ae585c6c6dde0e902bb3daf0ddbc615b9"),
     ("twitch-logo", "fill/twitch-logo-fill.svg", "df5adaa427994af42c961715d6e75f496b1832606a68cbd8090d09c25a4e8361"),
     ("steam-logo", "fill/steam-logo-fill.svg", "1715fdfe47e32c6cbff76fd80dcb47c1e5a704b2067412dd64dff20b8d802a11"),
@@ -79,13 +80,13 @@ ICONS = [
     ("amazon-logo", "fill/amazon-logo-fill.svg", "96d475f1eaed1733e9c6dcae74b52900be7e399b128917a8f50d89d773041491"),
     ("mastodon-logo", "fill/mastodon-logo-fill.svg", "f9d1bf489b16a34763aa7f8e8de62f72812cb9888fd92bbc47eeac33d1426122"),
     ("skype-logo", "fill/skype-logo-fill.svg", "bd264055d7317fb0cfe3a39ae17028d2a5447dc3a204a999c5e5fbebed423e28"),
-    ("game-controller", "fill/game-controller-fill.svg", "9dcb7af7b4854bb2da15ab1852292428c4d95314b06cd25aa5f45f21b3134884"),
-    ("television", "fill/television-fill.svg", "47da225e96c028e8d8fb02db79798082f8f2dfaad22dd9c2ad576f982f4a0de4"),
-    ("globe", "bold/globe-bold.svg", "b1dff2302e56cfc39cb704bb109486ee53d29a9a65f5a02f50e258259fbf743e"),
-    ("link", "bold/link-bold.svg", "087d63d78d4a37d570853cb62e688323759cda2081b22455674544f87adc3444"),
-    ("copy", "bold/copy-bold.svg", "204e84365593c418c71d9ce0674be3dd3e5ff13d0dc13e1f728249ef9571bf9e"),
+    ("game-controller", "repo:assets/icons/discord/game-controller.svg", "44f8e28ff41e575cd6d605f7c8dc16a5bb025c3ef91133fc4ba2c667cb80f62d"),
+    ("television", "repo:assets/icons/discord/tv.svg", "515b0ca68410aa8cf81cb18d1dd1beeb3aaa754cea943f04e0115576e38ee27b"),
+    ("globe", "repo:assets/icons/discord/globe-earth.svg", "d6661669d3fba175122f172138384531cbbca38f22796d13c471b97dae3d6a40"),
+    ("link", "repo:assets/icons/discord/link.svg", "768709fafc601aed83905b4e08fea798af268584cf12ed4a430fbc833e664a34"),
+    ("copy", "repo:assets/icons/discord/copy.svg", "7dc0f893f3fa22a0e9302afd3640e070448a456370391d551ef81481b2202dec"),
     ("seal-check", "fill/seal-check-fill.svg", "27702a62622ac4156d2a18b10fc7c526b3b2b9f782741e2cb07aea6964d71132"),
-    ("calendar-blank", "fill/calendar-blank-fill.svg", "405596825bf3705baa7d289ed1242106fded80e34967927549a0413f4303a0ac"),
+    ("calendar-blank", "repo:assets/icons/discord/calendar.svg", "efd45a80f2e06a2a8b94cb15158e6aa55888bdfc9c775601ad5f9a2d0916551e"),
     ("serein-mark", BRAND_MARK, "131359276c0f4abe7f97f99f0ad73cad88fec4d9845ad01bcdece940a089dc3e"),
     ("file", "fill/file-fill.svg", "d6fe00691e45b5e9b87ccc5a8fc9022485935408167ab1234817915df4fd1ca4"),
     ("file-image", "fill/file-image-fill.svg", "0266eb983ed5cec9152d76691152123b92b2cb84d8c139c37793d0870df3f601"),
@@ -95,39 +96,56 @@ ICONS = [
     ("file-code", "fill/file-code-fill.svg", "127044e7395681d5306c7553cc2287e16c63f9d4578f4f6fe7710f277e5b7624"),
     ("file-audio", "fill/file-audio-fill.svg", "835c6bfde42e68d716db3dd4db0e02843f6a7bd704a4377287a4b022d80ace7a"),
     ("file-video", "fill/file-video-fill.svg", "2940d83bf3560f389d6a826ca639741a9098d5bfe8910ea371fdc4c83790b827"),
-    ("trash", "fill/trash-fill.svg", "f78767cc15e1a7d6eea49c4efb515cf6fceaf07fbc421e8ce18373d07c14b673"),
-    ("arrow-down", "bold/arrow-down-bold.svg", "193222b87a796f1c56336f51cb041cfd2a6c899ae0a027248a63fc183758a364"),
-    ("arrow-up", "bold/arrow-up-bold.svg", "87dade5b87b48190dae13370375e2d84f6c22548eebac93ff2f46d091882fb78"),
-    ("check", "bold/check-bold.svg", "d0ca4e324ff5bb3a1a3bacb9f7580359b8e03cc6862a614d5ed14458db64bedf"),
-    ("gif", "bold/gif-bold.svg", "cbdd66cdfbe9f084d2ecc7e7a27686830b5230cc0a18f9765fb9c147ac8e0647"),
-    ("star", "bold/star-bold.svg", "e456b195ce0f28235d63c0612b835fd120c747a8132d2be984863e2125674240"),
-    ("star-fill", "fill/star-fill.svg", "42451b34121b695bdaab88fdcf3eacec9cda9ac36d222349609426dcb9f04b48"),
-    ("fire", "fill/fire-fill.svg", "512355fb2a156f0c39485a28bc6f81cf1df3de35faed9c5ad62c30cec5d8d63c"),
-    ("arrow-left", "bold/arrow-left-bold.svg", "7588792d7824e7c5337bca7b5de96ad0685ddea0a5732dfb62701d163a076563"),
-    ("folder", "fill/folder-fill.svg", "2217bd2f730884d7a8aec3e3358eb7500448b0e3d86f33a63142f40f0622bfe9"),
+    ("trash", "repo:assets/icons/discord/trash.svg", "412f1c8b629e2949c4699bfa4f10d631b5297106a89c9047b66c972a584e250b"),
+    ("arrow-down", "repo:assets/icons/discord/arrow-small-down.svg", "6a366eb401e0749e4dcc1fc99d09b4130537527b54bf3e2dcd234cf3e8864bbb"),
+    ("arrow-up", "repo:assets/icons/discord/arrow-small-up.svg", "cbccb4b65957a86cab209cc5c2ad3608a41e84ff7f0fc7f402b0308456aaa946"),
+    ("check", "repo:assets/icons/discord/checkmark-large.svg", "a61b14d48c9f8c62ccec788ccc8fbd9668793737de4c97c941bbc133ba9a9cce"),
+    ("gif", "repo:assets/icons/discord/gif.svg", "b35663f3e765f67ebe2540aa6d0dc9d86b1c31cad1d4922191ae4ea5c2b6a887"),
+    ("star", "repo:assets/icons/discord/star-outline.svg", "9206c98210c6d32e5a7ca6ae4a1391ceb669663bdfa14550d70977f88de0318c"),
+    ("star-fill", "repo:assets/icons/discord/star.svg", "2c6db9014d6b7ad2286aff9957364fa1ef58742556fc5fb694f1d5044c34fe73"),
+    ("fire", "repo:assets/icons/discord/fire.svg", "eda3dfe974bce2e978294e76660ed2c6f3332dcd3458f6b6bd957ff1b3f418be"),
+    ("arrow-left", "repo:assets/icons/discord/arrow-small-left.svg", "59f86dca9514cd3b0fb949f38a11e6799dbb729c1ad0051d09a9bdb2baa98664"),
+    ("folder", "repo:assets/icons/discord/folder.svg", "d87ba163b758cf9c1239f3ea0741606990cd6636ee760778d08f3a2882eb63b0"),
     ("folder-open", "fill/folder-open-fill.svg", "f9e57c3d40ab536915f8302a4390405f5660ee7b7275a3f80b384d977c59373e"),
-    ("caret-left", "bold/caret-left-bold.svg", "b78b6f532b53b9847340961848cb9e4f5be7e1da07e9dcf11c60cf64aa3986b7"),
-    ("download-simple", "bold/download-simple-bold.svg", "3ca0b8bba15633eb29f9818fe3670d6438bcbc897649c767e491a411e696e2d3"),
-    ("arrow-right", "bold/arrow-right-bold.svg", "aa0f883acecf63d9140ad7cd51910fa4b723671c400772a3c621c9cc16b1687b"),
-    ("image", "fill/image-fill.svg", "4f4dbea3adfc054509fed7f8e0f7d50fbf716904e37fc55387d29018d15b52fd"),
-    ("sparkle", "fill/sparkle-fill.svg", "9872a9255717f4ecc0f01b028b9436042e0f49391e4ce7a57f61aa466684fad1"),
-    ("compass", "fill/compass-fill.svg", "9663ec833384ba767b617ba3c256a3e00a23bd666810e2f2214171896498b6dc"),
-    ("megaphone-simple", "fill/megaphone-simple-fill.svg", "cead45ff02f94b5bd1aa2e59268b884482b43cc54f7b316d69e7030a2bd7196e"),
-    ("shield-warning", "fill/shield-warning-fill.svg", "8c594562a5adfd9fcce1f76514b62e8c626c4c00d742a69aa51214bae0b4037f"),
-    ("crown", "fill/crown-fill.svg", "a285272ce54401826e1458e5437aaa5dd78b5bb92b75092093f091eb024b0a45"),
-    ("chart-bar", "fill/chart-bar-fill.svg", "a417cc075c304374043e7d47f7622606b15f14e4c65663fd7a8a9898d768362a"),
-    ("shopping-cart-simple", "fill/shopping-cart-simple-fill.svg", "679456c02afec984a2ab635443724baca8b891a1bc4f245469f9bcbbf6a13fdb"),
-    ("lock-simple", "fill/lock-simple-fill.svg", "54b137caf94b8082e63a2831e5b726bbc9cd32ad40938bf5656ff4d44b442d95"),
-    ("eye-slash", "fill/eye-slash-fill.svg", "fc34ad807da63ae5f99a235618cddc1b2bef8d98d7c95004d38b61312540b90d"),
-    ("sliders-horizontal", "bold/sliders-horizontal-bold.svg", "e409a5fb3c2c134e46d51e48ac395e392223e04535c5ec664253f3e7e78cd7a9"),
-    ("arrows-down-up", "bold/arrows-down-up-bold.svg", "174464c54af7273e46a6fc204ebd0fc1da75906573880687836b314e3fbdb85e"),
-    ("thread", "repo:assets/icons/thread.svg", "dfd7daf80375504a5af37b95bee1773af55a9eabe7c802e7f4152905f123c72c"),
-    ("device-mobile", "bold/device-mobile-bold.svg", "77a4a5ebcba16e37637e700381bc3858b92c9350730ecf1e207f5f40d524de03"),
-    ("hard-drives", "fill/hard-drives-fill.svg", "16f26a807a05ded561ff3322879e698b70d77f07df5dabda451825ddd8f5ba28"),
-    ("corners-out", "bold/corners-out-bold.svg", "df74ba3c2a496a344f98e80c0782f43aa3760ed4b8b6103a4c621bfc59575e16"),
+    ("caret-left", "repo:assets/icons/discord/chevron-small-left.svg", "6255ba280807e2b5b3168b0a799d9d87e504c4229d91beffb3d8d8cb3e511c11"),
+    ("download-simple", "repo:assets/icons/discord/download.svg", "215356068135026757dcb24c58d38cb9ed5ec9a8ae83945a9ca57cb00e211169"),
+    ("arrow-right", "repo:assets/icons/discord/arrow-small-right.svg", "60a39702c735e896884969468b7b70a1fd1baec2f0005a139cb61620e3f24450"),
+    ("image", "repo:assets/icons/discord/image.svg", "c79ff6b1b583b5705f4f96d07f21057891175e230b7d0653b1819f69c211b849"),
+    ("sparkle", "repo:assets/icons/discord/sparkles.svg", "abb4eb14387ac40768ba5a47f41e3d9acec872a0adab808f98be9eb6dfb443df"),
+    ("compass", "repo:assets/icons/discord/compass.svg", "b5d312ab62e9d34adaef0ebeb8038250d4db7a7441c432c01629930376749522"),
+    ("megaphone-simple", "repo:assets/icons/discord/announcements.svg", "3f08ef521b9f27b35ce7289f44db476ced95adce1ec1ab4bafa193ccccd50521"),
+    ("shield-warning", "repo:assets/icons/discord/warning.svg", "c3390bd0cb70a81ffa73a20e5f4dac9d8e44a061b3be8a7d2d6babac6272ce06"),
+    ("crown", "repo:assets/icons/discord/crown.svg", "2e634a195aead4e1d4418f44401cf2a6dd72e4c4899ccd1923a9b524c2b45612"),
+    ("chart-bar", "repo:assets/icons/discord/analytics.svg", "edf28c5cba3657b667e487d0a3df7a45819575cd456a4880328ba8337833c920"),
+    ("shopping-cart-simple", "repo:assets/icons/discord/shop.svg", "b6082ae06dbe88474e9c77e87b89fb10908286ce5389bedce6fa1298df00c76e"),
+    ("lock-simple", "repo:assets/icons/discord/lock.svg", "e4faca460aaf61876915dbacf9d29994abb836cb4aab9fc43bfa2cecfda3e983"),
+    ("eye-slash", "repo:assets/icons/discord/eye-slash.svg", "254495e650909bfe88c06ab64d823f41138de7bcd546c2bbeb1a0463448e3d07"),
+    ("sliders-horizontal", "repo:assets/icons/discord/filters-horizontal.svg", "0df2acc035a76dfc8f2089c1779d4d5e8683392d19f34e3b53c52c16bafa7ff5"),
+    ("arrows-down-up", "repo:assets/icons/discord/arrows-up-down.svg", "ef78403eb431d269acc3afe9bd56e70b5fceab8437a609d1c58c45b0d213e80c"),
+    ("thread", "repo:assets/icons/discord/thread.svg", "99e4b49d90b586a7dc4316e2d349a6926a9dd6330e7837e3490afdfad1ffd122"),
+    ("device-mobile", "repo:assets/icons/discord/mobile-phone.svg", "57e16a0bbe7088851c053548427a521bd356f4aaee2eb771ab1589a4019eeed3"),
+    ("hard-drives", "repo:assets/icons/discord/server.svg", "8221996e8ea490c8f2dc081eb2870c5ca4e4d62a249f0d30ae7e30199adff658"),
+    ("corners-out", "repo:assets/icons/discord/fullscreen-enter.svg", "3fbbfd841584f89dc06c8a891663335844b2f453e146b501f5daef0b07d959b7"),
     ("scissors", "bold/scissors-bold.svg", "10d7c433d8284923caa353edbfa984be5c9b12aab331c36d3f250f3bd7656a1d"),
     ("clipboard-text", "bold/clipboard-text-bold.svg", "3d1f047a9ea53283cada888642cc9427e3ec7ac766beeefee19581454b4b26b4"),
-    ("selection-all", "bold/selection-all-bold.svg", "a5db79d398382ba9c9bf0abe75290e46cf11c41464be439b66c8e3ee30a716a3"),    ("monitor-x", "repo:assets/icons/monitor-x.svg", "5850e9e31daefe53ac6e117abd690e5171c055b40cbdd9337948bd2fbbfc11a9"),
+    ("selection-all", "bold/selection-all-bold.svg", "a5db79d398382ba9c9bf0abe75290e46cf11c41464be439b66c8e3ee30a716a3"),
+    ("monitor-x", "repo:assets/icons/discord/screen-x.svg", "8de6dea5591970fa80529309577836c7b74a6a1efa0a7beeaa31dc7484e1e36b"),
+    ("user", "repo:assets/icons/discord/user.svg", "e0108342c023a805e1ea31a01b7d9a9c55453dbd46b066de1583b7cdb269d5e2"),
+    ("chat-circle-dots", "repo:assets/icons/discord/chat.svg", "f3bdc69a5a1d13cc677df29c4e5488b11b44c1a05ab6b61740a89163414a8c89"),
+    ("tire", "repo:assets/icons/discord/nitro-wheel.svg", "f4467ebcb1d84f34a215a257e0092a7194653265fbcb9fd55b264a6853a08955"),
+    ("diamond", "repo:assets/icons/discord/boost-gem.svg", "512ed583decdc8ef48f1ae0dfe2299c218142933c2757d39e6503a8f85b5ee46"),
+    ("arrows-clockwise", "bold/arrows-clockwise-bold.svg", "f79592c23ce2e13807dcf27ed5de18aa1484beb9a976b0c0bfd81ee280198b55"),
+    ("gift", "repo:assets/icons/discord/gift.svg", "923678856b4a4a5399890dbd9ff37ca8bdfaab3c181742747aefd59a11560aaf"),
+    ("credit-card", "repo:assets/icons/discord/credit-card.svg", "789d41276d4f8dd44a1ef48d2b638862491eb310ce62c6fdb65791193ecec3c0"),
+    ("palette", "repo:assets/icons/discord/paint-palette.svg", "5b9802b8b8753632c3025cb74d24a5bd6787b7420fd1cc6b0d4be86896f668b1"),
+    ("person-arms-spread", "repo:assets/icons/discord/accessibility.svg", "efbdb4c6826aec668fe5a1f8b3aa6c185e861c4499075fbff9ee86600ec9b88b"),
+    ("keyboard", "repo:assets/icons/discord/keyboard.svg", "51433e3870c1485afc70447d9285995a753c8d6df67165570e3cb8f099dacdf8"),
+    ("translate", "repo:assets/icons/discord/language.svg", "9e5a178f838142b2539d31e0677f3c39c6974496c96975eda5a885cd521b8400"),
+    ("user-focus", "repo:assets/icons/discord/shield-user.svg", "645529db5f87d2a160a84569579df4f69dc4ca1ed300cdf0866f89f9458c6791"),
+    ("code", "repo:assets/icons/discord/angle-brackets.svg", "d6e88e92db1e10a3906c4e8a0b54b46b6b0be2bc1cd9fb3c8fe702aba028459a"),
+    ("sign-out", "repo:assets/icons/discord/door-exit.svg", "fae777acfe07d0523d2cfa02de83e67f2d9650848b4d27cfeaa81a7f55473991"),
+    ("puzzle-piece", "repo:assets/icons/discord/apps.svg", "432f2a06cbd46c7033e6e74a74669087241c6fff90fb9753bdab1d688a845954"),
+    ("paint-brush", "repo:assets/icons/discord/paintbrush-thin.svg", "a394d45779c706f7f75bc20403d4beb823d981addc8e764bce32c9cd0a592ef8"),
 ]
 LICENSE_SHA256 = "ddbe6082ec3cf979db47e5af549d2849c5d6182b3e005ef91ce1dbb9eb122f11"
 
@@ -189,17 +207,13 @@ def main():
     rows = (len(sources) + COLUMNS - 1) // COLUMNS
     width, height = COLUMNS * CELL, rows * CELL
     parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">']
-    parts.append(
-        '<defs><mask id="slash" maskUnits="userSpaceOnUse" x="0" y="0" width="256" height="256">'
-        '<rect width="256" height="256" fill="#fff"/>'
-        '<path d="M40 24 L232 216" stroke="#000" stroke-width="44" stroke-linecap="round"/></mask></defs>'
-    )
     index = []
     root = Path(__file__).resolve().parents[1]
     for cell, (name, asset, sha256, simple) in enumerate(sources):
         local = asset.startswith("repo:")
         if local:
-            svg = (root / asset.removeprefix("repo:")).read_bytes()
+            # Hashes pin the LF blob Git stores, whatever the checkout's line endings.
+            svg = (root / asset.removeprefix("repo:")).read_bytes().replace(b"\r\n", b"\n")
         else:
             svg = fetch(asset, SIMPLE_BASE) if simple else fetch(f"assets/{asset}")
         digest = hashlib.sha256(svg).hexdigest()
@@ -212,7 +226,7 @@ def main():
         x = (cell % COLUMNS) * CELL + PAD
         y = (cell // COLUMNS) * CELL + PAD
         if local:
-            # Our own mark is trimmed to its bounding box; honour its view box offset.
+            # Local glyphs fill their own view box; honour its offset and size.
             box = text.split('viewBox="', 1)[1].split('"', 1)[0].split()
             left, top, size = float(box[0]), float(box[1]), float(box[2])
             scale = GLYPH / size
@@ -224,13 +238,6 @@ def main():
         else:
             assert 'viewBox="0 0 256 256"' in text, asset
             scale = GLYPH / 256
-        if name.endswith("-slash") and "slash" not in asset:
-            # Phosphor has no slashed headphones; compose the upstream glyph with a knocked-out
-            # diagonal in the style of its own `*-slash` icons.
-            body = (
-                f'<g mask="url(#slash)">{body}</g>'
-                '<path d="M40 24 L232 216" stroke="#fff" stroke-width="16" stroke-linecap="round"/>'
-            )
         parts.append(f'<g transform="translate({x:.6f} {y:.6f}) scale({scale:.6f})" fill="#fff">{body}</g>')
         index.append((name, cell))
     parts.append("</svg>")

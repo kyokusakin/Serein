@@ -1,48 +1,102 @@
 # en-US application translations. Edit with Weblate or any Fluent editor.
 
 language-system = System
-language-group = Language
-language-label = Display language
-language-description = Choose Serein's language. Discord content is never translated.
-section-user = User settings
-section-app = App settings
-section-customization = Customization
+language-label = Choose a language
+language-description = Choose the language Serein is shown in.
+language-name-en-US = English, US
+language-name-es = Spanish
+language-name-fr = French
+language-name-de = German
+language-name-ru = Russian
+language-name-pt-BR = Portuguese, Brazilian
+language-name-tr = Turkish
+language-name-ja = Japanese
+language-name-ko = Korean
+language-name-pl = Polish
+language-name-it = Italian
+language-name-cs = Czech
+language-name-zh-TW = Chinese, Taiwan
+language-name-zh-CN = Chinese, China
 page-account = My Account
 page-profile = Profile
 page-general = General
 page-appearance = Appearance
-page-chat = Chat
 page-messaging-permissions = Messaging Permissions
 page-notifications = Notifications
 page-registered-games = Registered Games
 page-voice = Voice & Video
-page-keybinds = Keybinds
 page-storage = Data & Privacy
 page-updates = Updates
 page-extensions = Extensions
 page-themes = Themes
-description-account = The Discord account signed in on this device.
-description-profile = Choose how you appear across Discord.
-description-general = Startup, window and graphics behavior on this device.
-description-appearance = Theme, colours, window effects and layout.
-description-chat = How messages, media, links and scrolling behave.
-description-messaging-permissions = Control who can contact you and how messages are filtered.
-description-notifications = Choose which notifications you receive and how they appear.
-description-registered-games = Share what you play, and fix or add the games Serein detects.
-description-voice = Microphone, speakers, camera and voice processing.
-description-keybinds = Keyboard shortcuts for Serein.
-description-storage = What Serein keeps on this device.
-description-updates = Keep Serein up to date on this device.
-description-extensions = Manage community plugins.
-description-themes = Choose a community theme.
+page-system = System
+section-experience = Experience
+section-games-apps = Games & Apps
+settings-sub-theme = Theme
+settings-sub-messages = Messages
+section-billing = Billing Settings
+section-serein = Serein
+page-nitro = Nitro
+page-boost = Server Boost
+page-subscriptions = Subscriptions
+page-gifts = Gift Inventory
+page-billing = Billing
+page-accessibility = Accessibility
+page-activity-privacy = Activity Privacy
+page-connections = Connected Apps
+page-developer = Developer
+settings-sub-chat-box = Chat Box
+settings-sub-advanced = Advanced
+settings-sub-visual-density = Visual Density
+settings-sub-reduced-motion = Reduced Motion
+settings-sub-custom-keybinds = Custom Keybinds
+settings-sub-default-keybinds = Default Keybinds
+settings-sub-shared-activity = Shared Activity
+settings-sub-connections = Connections
+settings-sub-authorized-apps = Authorized Apps
+settings-sub-payment-methods = Payment Methods
+settings-sub-transactions = Transaction History
+settings-sub-your-subscriptions = Your Subscriptions
+settings-sub-active-boosts = Active Boosts
+settings-sub-purchased-gifts = Gifts You Purchased
+settings-developer-mode = Developer Mode
+settings-developer-mode-description = Developer Mode exposes context menu items helpful for people writing bots using the Discord API.
+account-retry = Try again
+account-nitro-none = You don't have a Nitro subscription.
+account-renews = Renews on { $date }
+account-ends = Ends on { $date }
+account-past-due = Payment past due
+account-paused = Paused
+account-subscription-boosts = { $count ->
+    [one] { $count } Server Boost
+   *[other] { $count } Server Boosts
+}
+account-subscription-app = App subscription
+account-subscriptions-empty = You don't have any subscriptions.
+account-boost-unused = Unused boost
+account-boost-cooldown = Available again on { $date }
+account-boost-canceled = Canceled
+account-boosts-empty = You don't have any boosts.
+account-gifts-empty = You don't have any gifts.
+account-payment-default = Default
+account-payment-invalid = Invalid
+account-payment-expires = Expires { $date }
+account-payment-other = Payment method
+account-sources-empty = You haven't added a payment method.
+account-payments-empty = No transactions yet.
+account-payment-pending = Pending
+account-payment-failed = Failed
+account-payment-reversed = Reversed
+account-payment-refunded = Refunded
+account-payment-canceled = Canceled
+account-connections-empty = You haven't connected any accounts.
+account-apps-empty = You haven't authorized any apps.
 theme-maker = Theme maker
-theme-maker-description = Make it yours. Preview changes in your conversations.
 search = Search
 no-settings-found = No settings found
 search-suggestion = Try theme, notifications, voice, or cache.
 exit-preview = Exit preview
 log-out = Log out
-unofficial = Unofficial · not endorsed by Discord
 offline-preview = Offline preview · changes stay in this session and are never sent.
 general-startup = Startup
 general-open-at-startup = Open Serein when your computer starts
@@ -1562,7 +1616,7 @@ join-server-body-choose-join-server-to-confirm = Choose Join Server to confirm.
 # Context: body
 join-server-body-don-t-have-an-invite = Don't have an invite?
 # Context: body
-join-server-body-explore-discoverable-communities-in-discord = Explore discoverable communities in Discord ↗
+join-server-body-explore-discoverable-communities-in-discord = Explore discoverable communities
 # Context: body
 join-server-body-fetching-server-details = Fetching server details…
 # Context: body
@@ -2915,6 +2969,21 @@ server-integrations-editor-channel = Channel
 server-integrations-editor-choose-a-channel = Choose a channel
 # Context: editor
 server-integrations-editor-name = Name
+server-integrations-editor-minimum-size = Minimum size: 128x128
+scheduled-events-title = Events
+scheduled-events-none = There are no upcoming events.
+scheduled-events-happening-now = Happening now
+scheduled-events-count = { $count ->
+        [one] { $count } Event
+       *[other] { $count } Events
+    }
+scheduled-events-interested = { $count } Interested
+discovery-title = Discover
+discovery-search = Explore communities
+discovery-none = No results found
+discovery-online = { $count } Online
+discovery-members = { $count } Members
+server-integrations-editor-upload-avatar = Upload avatar
 # Context: editor
 server-integrations-editor-reset = Reset
 # Context: editor
@@ -5048,7 +5117,6 @@ badges-hide-levels = Hide levels
 # Context: badges
 badges-manage = Manage your badges
 page-language-time = Language & Time
-description-language-time = Display language and how times are shown.
 time-format-group = Time format
 time-format-auto = Auto
 time-format-12-hour = 12-hour
@@ -5177,3 +5245,215 @@ moderation-delete-week = Previous 7 days
 moderation-confirm-timeout = Timeout
 # Context: moderation
 moderation-confirm-ban = Ban
+
+## Settings sections
+settings-sub-local-data = Local Data
+settings-sub-voice-e2ee = Voice Encryption
+settings-sub-voice = Voice
+settings-sub-camera = Camera
+settings-sub-streaming = Streaming
+settings-sub-sounds = Sounds
+settings-sub-soundboard = Soundboard
+settings-sub-streamer-mode = Streamer Mode
+
+## Streamer Mode
+streamer-mode-enable = Enable Streamer Mode
+streamer-mode-enable-description = Hides personal information and invite links while you stream.
+streamer-mode-automatic = Automatically enable or disable when OBS or XSplit is running
+streamer-mode-when-enabled = While Streamer Mode is on
+streamer-mode-hide-personal = Hide Personal Information
+streamer-mode-hide-invites = Hide Invite Links
+streamer-mode-disable-sounds = Disable Sounds
+streamer-mode-disable-notifications = Disable Notifications
+streamer-mode-hide-window = Hide Window from Screen Capture
+streamer-mode-hide-window-description = Screen capture and sharing tools show this window as blank.
+streamer-mode-hidden = Hidden while Streamer Mode is on.
+
+## Voice encryption
+settings-persistent-verification-codes = Persistent Verification Codes
+settings-persistent-verification-codes-description = Keeps your end-to-end encryption key on this device so your verification codes stay the same between calls.
+settings-persistent-verification-codes-unavailable = This device has no available credential store, so the key cannot be kept.
+
+## Voice & Video
+voice-stream-previews = Show Stream Preview
+voice-stream-previews-description = Allow others to preview your stream before they join.
+voice-sounds-show-more =
+    { $count ->
+        [one] Show { $count } more sound
+       *[other] Show { $count } more sounds
+    }
+voice-sounds-show-more-description = { $first }, { $second }, { $third } and more
+voice-sounds-hide =
+    { $count ->
+        [one] Hide { $count } sound
+       *[other] Hide { $count } sounds
+    }
+voice-related-settings = Related Settings
+voice-related-notifications-description = Turn sounds for new messages and calls on or off.
+voice-soundboard-volume = Soundboard Volume
+voice-soundboard-volume-description = Controls how loud soundboard sounds play for you.
+voice-entrance-sounds = Entrance Sounds
+voice-entrance-sounds-description = Choose a soundboard sound that plays automatically when you join a voice channel.
+voice-entrance-sounds-server = Select Server
+voice-entrance-sounds-all-servers = All Servers
+voice-entrance-sounds-sound = Select Sound
+voice-entrance-sounds-nitro = Entrance sounds need Nitro.
+voice-entrance-sounds-edit = Edit
+voice-entrance-sounds-remove = Remove
+voice-soundboard-default-sounds = Default Sounds
+voice-soundboard-no-sounds = No sounds
+voice-settings-loading = Loading settings…
+voice-reset = Reset
+voice-reset-settings = Reset All Voice & Video Settings
+voice-reset-settings-description = Return Voice & Video settings to their defaults.
+voice-reset-confirm-title = Reset Voice & Video settings?
+voice-reset-confirm-message = Devices, volume, input mode, processing and camera settings return to their defaults.
+sound-message = Message
+sound-current-channel = Message in Current Channel
+sound-incoming-ring = Incoming Ring
+sound-outgoing-ring = Outgoing Ring
+sound-mute = Mute
+sound-unmute = Unmute
+sound-deafen = Deafen
+sound-undeafen = Undeafen
+sound-camera-on = Camera On
+sound-ptt-start = PTT Activate
+sound-ptt-stop = PTT Deactivate
+sound-user-join = User Join
+sound-user-leave = User Leave
+sound-stream-started = Stream Started
+sound-viewer-join = Viewer Join
+
+## Voice member menu
+voice-member-note-hint = Only visible to you
+voice-member-mute = Mute
+voice-member-deafen = Deafen
+voice-member-mute-soundboard = Mute Soundboard
+voice-member-disable-video = Disable Video
+voice-member-view-verification-code = View Verification Code
+voice-member-change-nickname = Change Nickname
+voice-member-move-to = Move To
+voice-member-server-mute = Server Mute
+voice-member-server-deafen = Server Deafen
+voice-member-disconnect = Disconnect
+voice-member-verification-title = Verification code with { $name }
+voice-member-verification-description = Compare these numbers with theirs outside this call. If they match, your call with them is end-to-end encrypted.
+voice-member-verification-loading = Generating the code…
+voice-member-verification-unavailable = They have not joined the end-to-end encrypted session yet.
+voice-member-verification-done = Done
+
+## Server administration
+server-admin-error-emoji-busy = Wait for the current emoji images to finish preparing or uploading.
+server-admin-error-emoji-batch = Finish the current uploads first. Choose up to 10 images at a time.
+server-admin-error-unsaved-navigation = Save or discard your server settings changes before opening the conversation.
+server-admin-error-emoji-limits = The selected images exceed the emoji upload limits.
+server-admin-error-emoji-upload = This emoji cannot be uploaded. Check its name, available slots and your permissions.
+server-admin-error-outcome-unknown = Outcome unknown; reload before retrying.
+server-admin-error-disconnected = Server administration disconnected; reload to continue.
+server-admin-error-audit-log-permissions = Server permissions changed; reload the audit log.
+server-admin-error-integrations-permissions = Server permissions changed; reload integrations to continue.
+server-admin-dialog-rename-emoji = Rename emoji
+server-admin-dialog-rename-emoji-hint = Names use letters, numbers and underscores.
+server-admin-dialog-delete-emoji-title = Delete emoji?
+server-admin-dialog-delete-emoji-message = Removing :{ $name }: cannot be undone.
+server-admin-dialog-nickname-hint = Only changes how this member appears in this server.
+server-admin-dialog-kick-title = Kick { $name }?
+server-admin-dialog-kick-message = They can rejoin with a new invite.
+server-admin-dialog-prune-title = Prune members
+server-admin-dialog-prune-message = Removes inactive members who have no additional roles.
+server-admin-dialog-prune-count =
+    { $count ->
+        [one] { $count } member would be removed.
+       *[other] { $count } members would be removed.
+    }
+server-settings-error-icon-too-large = The prepared icon is too large.
+server-settings-discard-title = Discard unsaved changes?
+server-settings-discard-message = Your changes to this server will be lost.
+server-settings-discard-wait = Wait for the current save to finish before closing.
+server-settings-error-invalid = Use a server name of 2–100 characters, a description of up to 300 characters, and valid traits without control characters.
+server-settings-error-save = Could not save these changes. Check the selected channels, reconnect, or reload the server settings and try again.
+server-settings-banner-color = Banner color { $color }
+server-roles-error-icon-limits = The prepared role icon exceeds its image limits.
+server-roles-error-move = This role cannot be moved. Reload the roles and check your permissions.
+server-roles-tab-manage-members = Manage Members ({ $count })
+server-roles-display-style = Role Style
+server-roles-display-style-solid = Solid
+server-roles-display-style-gradient = Gradient
+server-roles-display-style-holographic = Holographic
+server-roles-display-color = Role color
+server-roles-display-icon = Role icon
+server-roles-error-save = Could not save this role. Check the name, permissions and your role hierarchy.
+server-roles-error-members = Role members could not be loaded. Reload or change the search to try again.
+server-roles-discard-title = Discard role changes?
+server-roles-discard-message = Your unsaved changes to this role will be lost.
+server-roles-delete-this-role = this role
+server-roles-delete-title = Delete role?
+server-roles-delete-message = Members will lose every permission { $name } grants. This cannot be undone.
+server-invite-settings-title = Invite Link Settings
+server-invite-title = Invite friends to { $name }
+server-invite-creating-link = Creating invite link…
+server-invite-create-link-hint = Create a link to share
+server-invite-create-link = Create link
+server-invites-unknown-inviter = Unknown inviter
+server-invites-column-inviter = Inviter
+server-invites-column-code = Invite Code
+server-invites-column-uses = Uses
+server-invites-column-expires = Expires
+server-invites-expired = Expired
+server-audit-log-unknown-time = Unknown time
+server-audit-log-yesterday = Yesterday
+server-audit-log-time = { $date } at { $time }
+server-audit-log-reason = Reason: { $reason }
+server-audit-log-invite-code = With code { $code }
+server-audit-log-invite-channel = For channel #{ $channel }
+server-audit-log-invite-unlimited-uses = With unlimited uses
+server-audit-log-invite-max-uses =
+    { $count ->
+        [one] With a limit of { $count } use
+       *[other] With a limit of { $count } uses
+    }
+server-audit-log-invite-never-expires = Which never expires
+server-audit-log-invite-expires-days =
+    { $count ->
+        [one] Which expires after { $count } day
+       *[other] Which expires after { $count } days
+    }
+server-audit-log-invite-expires-hours =
+    { $count ->
+        [one] Which expires after { $count } hour
+       *[other] Which expires after { $count } hours
+    }
+server-audit-log-invite-expires-seconds =
+    { $count ->
+        [one] Which expires after { $count } second
+       *[other] Which expires after { $count } seconds
+    }
+server-audit-log-invite-temporary-on = With temporary membership on
+server-audit-log-invite-temporary-off = With temporary membership off
+server-audit-log-removed = Removed { $field }: { $value }
+server-audit-log-not-provided = Not provided
+server-integrations-error-avatar-too-large = The prepared avatar is too large.
+server-integrations-error-update = Could not update integrations. Check your permissions and connection, then reload.
+server-integrations-remove-title = Remove integration?
+server-integrations-remove-message = Removing { $name } also removes its bot and every webhook it owns from this server.
+server-integrations-delete-webhook-title = Delete webhook?
+server-integrations-delete-webhook-message = { $name } will stop delivering messages. A followed channel will also stop sending posts to this server.
+server-integrations-unknown-channel = Unknown channel
+channel-permissions-unknown-role = Role { $id }
+channel-permissions-unknown-member = Member { $id }
+server-stickers-error-too-large = The prepared sticker exceeds 512 KB.
+server-stickers-edit-title = Edit sticker
+server-stickers-edit-message = Update the sticker name, description and related emoji.
+server-stickers-delete-title = Delete sticker?
+server-stickers-delete-message = Removing { $name } cannot be undone.
+forum-settings-select-emoji = Select emoji
+channel-menu-preferences-full = Saved channel preferences are full. Remove a favorite or pin, or expand a category.
+channel-menu-updating = Updating channel settings…
+channel-menu-action-not-started = The channel action could not be started.
+channel-menu-type-text = Text
+channel-menu-type-text-description = Send messages, images, GIFs, emoji, opinions, and puns
+channel-menu-type-voice = Voice
+channel-menu-type-voice-description = Hang out together with voice, video, and screen share
+channel-menu-type-announcement = Announcement
+channel-menu-type-announcement-description = Important updates for people in and out of the server
+channel-menu-type-forum-description = Create a space for organized discussions

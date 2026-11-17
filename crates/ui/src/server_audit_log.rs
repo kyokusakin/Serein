@@ -509,18 +509,21 @@ fn summary(entry: &Entry, page: &Page, state: &State) -> String {
 fn timestamp(id: Id) -> String {
 	let seconds = ((id.0 >> 22) + 1_420_070_400_000) / 1000;
 	let Ok(utc) = time::OffsetDateTime::from_unix_timestamp(seconds as i64) else {
-		return "Unknown time".into();
+		return crate::i18n::translate("server-audit-log-unknown-time");
 	};
 	let local = crate::local_time::local(utc);
 	let now = crate::local_time::now();
 	let date = if local.date() == now.date() {
-		"Today".into()
+		crate::i18n::translate("account-menu-label-today")
 	} else if Some(local.date()) == now.date().previous_day() {
-		"Yesterday".into()
+		crate::i18n::translate("server-audit-log-yesterday")
 	} else {
 		local.date().to_string()
 	};
-	format!("{date} at {}", crate::local_time::clock(local))
+	crate::i18n::translate_args(
+		"server-audit-log-time",
+		&[("date", &date), ("time", &crate::local_time::clock(local))],
+	)
 }
 fn details(ui: &mut egui::Ui, entry: &Entry, state: &State) {
 	let colors = design::palette(ui);
@@ -544,7 +547,10 @@ fn details(ui: &mut egui::Ui, entry: &Entry, state: &State) {
 		line(ui, format!("{}: {}", field_name(&option.key), option.value));
 	}
 	if let Some(reason) = &entry.reason {
-		line(ui, format!("Reason: {reason}"));
+		line(
+			ui,
+			crate::i18n::translate_args("server-audit-log-reason", &[("reason", reason)]),
+		);
 	}
 	if index == 1 {
 		ui.weak(crate::i18n::translate(
@@ -556,31 +562,50 @@ fn change_text(change: &Change, state: &State) -> String {
 	if matches!(change.old, Patch::Absent)
 		&& let Patch::Value(value) = &change.new
 	{
+		use crate::i18n::translate_args as text;
 		match change.key.as_str() {
-			"code" => return format!("With code {value}"),
+			"code" => return text("server-audit-log-invite-code", &[("code", value)]),
 			"channel_id" => {
 				if let Some(channel) = value.parse::<Id>().ok().and_then(|id| state.channel(id)) {
-					return format!("For channel #{}", channel.name);
+					return text(
+						"server-audit-log-invite-channel",
+						&[("channel", &channel.name)],
+					);
 				}
 			}
-			"max_uses" if value == "0" => return "With unlimited uses".into(),
-			"max_uses" => return format!("With a limit of {value} uses"),
-			"max_age" if value == "0" => return "Which never expires".into(),
+			"max_uses" if value == "0" => {
+				return text("server-audit-log-invite-unlimited-uses", &[]);
+			}
+			"max_uses" => {
+				if let Ok(count) = value.parse::<usize>() {
+					return crate::i18n::translate_count(
+						"server-audit-log-invite-max-uses",
+						count,
+						&[],
+					);
+				}
+			}
+			"max_age" if value == "0" => return text("server-audit-log-invite-never-expires", &[]),
 			"max_age" => {
 				if let Ok(seconds) = value.parse::<u64>() {
-					return if seconds % 86400 == 0 {
-						format!("Which expires after {} days", seconds / 86400)
+					let (key, amount) = if seconds % 86400 == 0 {
+						("server-audit-log-invite-expires-days", seconds / 86400)
 					} else if seconds % 3600 == 0 {
-						format!("Which expires after {} hours", seconds / 3600)
+						("server-audit-log-invite-expires-hours", seconds / 3600)
 					} else {
-						format!("Which expires after {seconds} seconds")
+						("server-audit-log-invite-expires-seconds", seconds)
 					};
+					return crate::i18n::translate_count(key, amount as usize, &[]);
 				}
 			}
 			"temporary" if value == "true" || value == "false" => {
-				return format!(
-					"With temporary membership {}",
-					if value == "true" { "on" } else { "off" }
+				return text(
+					if value == "true" {
+						"server-audit-log-invite-temporary-on"
+					} else {
+						"server-audit-log-invite-temporary-off"
+					},
+					&[],
 				);
 			}
 			_ => {}
@@ -589,15 +614,18 @@ fn change_text(change: &Change, state: &State) -> String {
 	let field = field_name(&change.key);
 	match (&change.old, &change.new) {
 		(Patch::Absent, Patch::Value(value)) => format!("{field}: {value}"),
-		(Patch::Value(value), Patch::Absent) => format!("Removed {field}: {value}"),
+		(Patch::Value(value), Patch::Absent) => crate::i18n::translate_args(
+			"server-audit-log-removed",
+			&[("field", &field), ("value", value)],
+		),
 		(old, new) => format!("{field}: {} → {}", patch_text(old), patch_text(new)),
 	}
 }
-fn patch_text(value: &Patch<String>) -> &str {
+fn patch_text(value: &Patch<String>) -> String {
 	match value {
-		Patch::Absent => "Not provided",
-		Patch::Null => "None",
-		Patch::Value(value) => value,
+		Patch::Absent => crate::i18n::translate("server-audit-log-not-provided"),
+		Patch::Null => crate::i18n::translate("server-settings-channel-picker-none"),
+		Patch::Value(value) => value.clone(),
 	}
 }
 fn field_name(key: &str) -> String {

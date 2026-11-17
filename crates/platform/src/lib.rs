@@ -4,6 +4,7 @@ pub mod app_menu;
 pub mod audio;
 pub mod badge;
 pub mod captcha;
+pub mod capture_exclusion;
 pub mod compositor;
 pub mod game_activity;
 pub mod gsync;
@@ -317,6 +318,35 @@ pub fn save_account_session(
 }
 pub fn forget_account_session(account: model::Id) -> Result<(), CredentialError> {
 	forget_login(&account_entry(account))
+}
+fn voice_identity_entry(account: model::Id) -> String {
+	format!("voice-identity.{account}")
+}
+/// The account's kept voice encryption key. It lives only in the OS credential store; with no
+/// store, persistent verification codes are unavailable rather than written to a file.
+pub fn load_voice_identity(
+	account: model::Id,
+) -> Result<Option<zeroize::Zeroizing<Vec<u8>>>, CredentialError> {
+	match entry(&voice_identity_entry(account))?.get_secret() {
+		Ok(key) if key.len() <= 64 => Ok(Some(zeroize::Zeroizing::new(key))),
+		Ok(mut key) => {
+			zeroize::Zeroize::zeroize(&mut key);
+			Err(CredentialError::Invalid)
+		}
+		Err(keyring_core::Error::NoEntry) => Ok(None),
+		Err(_) => Err(CredentialError::Unavailable),
+	}
+}
+pub fn save_voice_identity(account: model::Id, key: &[u8]) -> Result<(), CredentialError> {
+	entry(&voice_identity_entry(account))?
+		.set_secret(key)
+		.map_err(|_| CredentialError::Unavailable)
+}
+pub fn forget_voice_identity(account: model::Id) -> Result<(), CredentialError> {
+	match entry(&voice_identity_entry(account))?.delete_credential() {
+		Ok(()) | Err(keyring_core::Error::NoEntry) => Ok(()),
+		Err(_) => Err(CredentialError::Unavailable),
+	}
 }
 /// A fallback file is authoritative until a confirmed OS save removes it. A marker
 /// remains after deletion to prevent an older (or late) keyring write restoring it.

@@ -1,5 +1,5 @@
 //! On-demand integration metadata. Webhook execution secrets are never retained.
-use crate::{Id, User};
+use crate::{Id, Patch, User};
 pub const MAX_INTEGRATIONS: usize = 50;
 pub const MAX_WEBHOOKS: usize = 1000;
 pub const MAX_BYTES: usize = 1024 * 1024;
@@ -183,12 +183,15 @@ pub enum Action {
 		scope: Option<Id>,
 		channel: Id,
 		name: String,
+		/// Only `Absent` or a prepared PNG data URI; a new webhook has no avatar to remove.
+		avatar: Patch<String>,
 	},
 	EditWebhook {
 		scope: Option<Id>,
 		webhook: Id,
 		channel: Id,
 		name: String,
+		avatar: Patch<String>,
 	},
 	DeleteWebhook {
 		scope: Option<Id>,
@@ -227,22 +230,27 @@ impl Action {
 				channel,
 				name,
 				scope,
+				avatar,
 			} => {
 				scope.is_none_or(|scope| scope == *channel)
 					&& channel.0 != 0
 					&& name.capacity() <= 320
 					&& valid_webhook_name(name)
+					&& !matches!(avatar, Patch::Null)
+					&& valid_avatar(avatar)
 			}
 			Self::EditWebhook {
 				webhook,
 				channel,
 				name,
+				avatar,
 				..
 			} => {
 				webhook.0 != 0
 					&& channel.0 != 0
 					&& name.capacity() <= 320
 					&& valid_webhook_name(name)
+					&& valid_avatar(avatar)
 			}
 			Self::CopyWebhookUrl {
 				scope,
@@ -254,11 +262,28 @@ impl Action {
 		}
 	}
 	pub fn normalize(&mut self) {
-		if let Self::CreateWebhook { name, .. } | Self::EditWebhook { name, .. } = self {
+		if let Self::CreateWebhook { name, avatar, .. } | Self::EditWebhook { name, avatar, .. } =
+			self
+		{
 			name.shrink_to_fit();
+			if let Patch::Value(avatar) = avatar {
+				avatar.shrink_to_fit();
+			}
 		}
 	}
 }
+/// A webhook avatar is a prepared PNG data URI within the shared icon upload ceiling.
+pub fn valid_avatar(avatar: &Patch<String>) -> bool {
+	match avatar {
+		Patch::Value(uri) => {
+			uri.capacity() <= crate::server_settings::MAX_ICON_DATA_URI
+				&& uri.len() > PNG_DATA_URI.len()
+				&& uri.starts_with(PNG_DATA_URI)
+		}
+		Patch::Absent | Patch::Null => true,
+	}
+}
+const PNG_DATA_URI: &str = "data:image/png;base64,";
 pub fn valid_webhook_name(name: &str) -> bool {
 	if name.len() > 320 {
 		return false;

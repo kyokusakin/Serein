@@ -1,5 +1,5 @@
-//! User settings modal in Discord's layout: a sidebar of pages on the left, the selected page
-//! on the right, and a round close control with its Escape hint.
+//! User settings modal in Discord's layout: a sidebar with the profile header, search and grouped
+//! pages on the left, and the selected page under its title and close button on the right.
 use crate::{MessagingUi, design, i18n::Language, icons};
 use client_core::State;
 use egui::RichText;
@@ -9,6 +9,7 @@ pub(super) struct Settings {
 	pub open: bool,
 	page: Page,
 	query: String,
+	pub(super) sections: SectionNav,
 	language_time_format: Option<(model::TimeFormat, Language)>,
 	pub(super) editor: crate::profile_edit::Editor,
 	pub(super) notifications: crate::notification_settings::Navigation,
@@ -16,130 +17,218 @@ pub(super) struct Settings {
 	pub(super) games: crate::registered_games::Page,
 }
 
+/// The open page's sections: the one at the top of the view and a pending sidebar jump.
+#[derive(Default)]
+pub(super) struct SectionNav {
+	page: Page,
+	active: usize,
+	jump: Option<usize>,
+}
+
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
-enum Page {
+pub(super) enum Page {
 	Account,
 	Profile,
-	General,
-	#[default]
-	Appearance,
-	Chat,
+	Storage,
 	MessagingPermissions,
 	Notifications,
-	/// Discord's Registered Games: activity sharing, the current game and Added Games.
-	Activity,
+	Nitro,
+	Boost,
+	Subscriptions,
+	Gifts,
+	Billing,
 	Voice,
-	Keybinds,
+	#[default]
+	Appearance,
+	Accessibility,
+	/// Discord's System page: startup and window behaviour, keybinds and graphics.
+	General,
 	/// Display language and clock style.
 	LanguageTime,
-	Storage,
-	Updates,
+	/// Discord's Registered Games: the current game and Added Games.
+	Activity,
+	ActivityPrivacy,
+	/// Discord's Connections and Authorized Apps.
+	Connections,
 	Extensions,
 	Themes,
+	Updates,
+	Developer,
 }
 impl Page {
 	/// Every page in sidebar order; the narrow-window page picker lists them the same way.
-	const ALL: [Self; 15] = [
+	const ALL: [Self; 22] = [
 		Self::Account,
 		Self::Profile,
-		Self::MessagingPermissions,
 		Self::Storage,
-		Self::Appearance,
-		Self::Chat,
+		Self::MessagingPermissions,
 		Self::Notifications,
+		Self::Nitro,
+		Self::Boost,
+		Self::Subscriptions,
+		Self::Gifts,
+		Self::Billing,
 		Self::Voice,
-		Self::Keybinds,
-		Self::Activity,
-		Self::LanguageTime,
+		Self::Appearance,
+		Self::Accessibility,
 		Self::General,
-		Self::Updates,
-		Self::Themes,
+		Self::LanguageTime,
+		Self::Activity,
+		Self::ActivityPrivacy,
+		Self::Connections,
 		Self::Extensions,
+		Self::Themes,
+		Self::Updates,
+		Self::Developer,
 	];
-	/// Sidebar sections: account-level choices first, then how this app looks and behaves,
-	/// then community add-ons.
-	const SECTIONS: [(&'static str, &'static [Self]); 3] = [
+	/// Sidebar groups in Discord's order, each with an optional heading. Profile opens from the
+	/// header above the groups; Serein's own pages sit in their own group before Developer.
+	const SECTIONS: [(Option<&'static str>, &'static [Self]); 6] = [
 		(
-			"section-user",
+			None,
 			&[
 				Self::Account,
-				Self::Profile,
-				Self::MessagingPermissions,
 				Self::Storage,
+				Self::MessagingPermissions,
+				Self::Notifications,
 			],
 		),
 		(
-			"section-app",
+			Some("section-billing"),
 			&[
-				Self::Appearance,
-				Self::Chat,
-				Self::Notifications,
-				Self::Voice,
-				Self::Keybinds,
-				Self::Activity,
-				Self::LanguageTime,
-				Self::General,
-				Self::Updates,
+				Self::Nitro,
+				Self::Boost,
+				Self::Subscriptions,
+				Self::Gifts,
+				Self::Billing,
 			],
 		),
-		("section-customization", &[Self::Themes, Self::Extensions]),
+		(
+			Some("section-experience"),
+			&[
+				Self::Voice,
+				Self::Appearance,
+				Self::Accessibility,
+				Self::General,
+				Self::LanguageTime,
+			],
+		),
+		(
+			Some("section-games-apps"),
+			&[Self::Activity, Self::ActivityPrivacy, Self::Connections],
+		),
+		(
+			Some("section-serein"),
+			&[Self::Extensions, Self::Themes, Self::Updates],
+		),
+		(None, &[Self::Developer]),
 	];
+	/// Section headings in page order; two or more appear as sidebar sub-items.
+	fn sections(self) -> &'static [&'static str] {
+		match self {
+			Self::Storage => &["settings-sub-local-data", "settings-sub-voice-e2ee"],
+			Self::Voice => &[
+				"settings-sub-voice",
+				"settings-sub-camera",
+				"settings-sub-streaming",
+				"settings-sub-sounds",
+				"settings-sub-soundboard",
+				"settings-sub-advanced",
+			],
+			Self::Appearance => &[
+				"settings-sub-theme",
+				"settings-sub-messages",
+				"settings-sub-chat-box",
+				"settings-sub-streamer-mode",
+				"settings-sub-advanced",
+			],
+			Self::Accessibility => &["settings-sub-visual-density", "settings-sub-reduced-motion"],
+			Self::General => &[
+				"page-general",
+				"settings-sub-custom-keybinds",
+				"settings-sub-default-keybinds",
+				"settings-sub-advanced",
+			],
+			Self::Activity => &[
+				"settings-activity-current-game",
+				"settings-activity-added-games",
+			],
+			Self::ActivityPrivacy => &["settings-sub-shared-activity"],
+			Self::Connections => &["settings-sub-connections", "settings-sub-authorized-apps"],
+			Self::Billing => &["settings-sub-payment-methods", "settings-sub-transactions"],
+			Self::Subscriptions => &["settings-sub-your-subscriptions"],
+			Self::Boost => &["settings-sub-active-boosts"],
+			Self::Gifts => &["settings-sub-purchased-gifts"],
+			_ => &[],
+		}
+	}
+	/// Sidebar row label, also the page title.
+	fn row_label(self, language: Language) -> String {
+		match self {
+			Self::General => language.text("page-system"),
+			page => page.label(language),
+		}
+	}
+	fn icon(self) -> icons::Icon {
+		match self {
+			Self::Account | Self::Profile => icons::Icon::User,
+			Self::Storage => icons::Icon::ShieldWarning,
+			Self::MessagingPermissions => icons::Icon::ChatDots,
+			Self::Notifications => icons::Icon::Bell,
+			Self::Nitro => icons::Icon::Nitro,
+			Self::Boost => icons::Icon::Boost,
+			Self::Subscriptions => icons::Icon::Subscriptions,
+			Self::Gifts => icons::Icon::Gift,
+			Self::Billing => icons::Icon::CreditCard,
+			Self::Voice => icons::Icon::Microphone,
+			Self::Appearance => icons::Icon::Palette,
+			Self::Accessibility => icons::Icon::Accessibility,
+			Self::General => icons::Icon::Keyboard,
+			Self::LanguageTime => icons::Icon::Translate,
+			Self::Activity => icons::Icon::GameController,
+			Self::ActivityPrivacy => icons::Icon::ActivityPrivacy,
+			Self::Connections => icons::Icon::Link,
+			Self::Extensions => icons::Icon::Puzzle,
+			Self::Themes => icons::Icon::PaintBrush,
+			Self::Updates => icons::Icon::Download,
+			Self::Developer => icons::Icon::Code,
+		}
+	}
 	fn label_key(self) -> &'static str {
 		match self {
 			Self::Account => "page-account",
 			Self::Profile => "page-profile",
-			Self::General => "page-general",
-			Self::LanguageTime => "page-language-time",
-			Self::Appearance => "page-appearance",
-			Self::Chat => "page-chat",
+			Self::Storage => "page-storage",
 			Self::MessagingPermissions => "page-messaging-permissions",
 			Self::Notifications => "page-notifications",
-			Self::Activity => "page-registered-games",
+			Self::Nitro => "page-nitro",
+			Self::Boost => "page-boost",
+			Self::Subscriptions => "page-subscriptions",
+			Self::Gifts => "page-gifts",
+			Self::Billing => "page-billing",
 			Self::Voice => "page-voice",
-			Self::Keybinds => "page-keybinds",
-			Self::Storage => "page-storage",
-			Self::Updates => "page-updates",
+			Self::Appearance => "page-appearance",
+			Self::Accessibility => "page-accessibility",
+			Self::General => "page-general",
+			Self::LanguageTime => "page-language-time",
+			Self::Activity => "page-registered-games",
+			Self::ActivityPrivacy => "page-activity-privacy",
+			Self::Connections => "page-connections",
 			Self::Extensions => "page-extensions",
 			Self::Themes => "page-themes",
+			Self::Updates => "page-updates",
+			Self::Developer => "page-developer",
 		}
 	}
 	fn label(self, language: Language) -> String {
 		language.text(self.label_key())
 	}
-	fn description_key(self) -> &'static str {
-		match self {
-			Self::Account => "description-account",
-			Self::Profile => "description-profile",
-			Self::General => "description-general",
-			Self::LanguageTime => "description-language-time",
-			Self::Appearance => "description-appearance",
-			Self::Chat => "description-chat",
-			Self::MessagingPermissions => "description-messaging-permissions",
-			Self::Notifications => "description-notifications",
-			Self::Activity => "description-registered-games",
-			Self::Voice => "description-voice",
-			Self::Keybinds => "description-keybinds",
-			Self::Storage => "description-storage",
-			Self::Updates => "description-updates",
-			Self::Extensions => "description-extensions",
-			Self::Themes => "description-themes",
-		}
-	}
-	fn description(self, language: Language) -> String {
-		language.text(self.description_key())
-	}
 	fn matches(self, query: &str, language: Language) -> bool {
 		let keywords = match self {
 			Self::Account => "my account profile logout",
 			Self::Profile => "profile edit display name about me bio pronouns color colour",
-			Self::General => {
-				"general windows macos linux login menu bar startup autostart automatically open minimized minimize close tray background title bar caption window buttons decorations borderless tiling graphics gpu adapter render discrete integrated hardware acceleration performance battery vrr variable refresh rate steady refresh rate g-sync gsync freesync adaptive sync flicker flickering steady frame rate fps vsync"
-			}
-			Self::Appearance => {
-				"appearance customization font typography import ttf otf primary accent hex window effects transparency blur gradient names cosmetics decorations theme dark light system mode zoom scale layout sidebar width people members member list reset colour color preset"
-			}
-			Self::Chat => {
-				"chat messages media reading animate animated gifs autoplay hide image links confirm confirmation external browser smooth scrolling scroll speed motion trackpad wheel hidden channels channel list reset emoji emojis nitro fake suggestions autocomplete locked emoticons chat box automatically convert"
+			Self::Storage => {
+				"data privacy local storage clear cache drafts credentials voice end-to-end encryption e2ee persistent verification codes"
 			}
 			Self::MessagingPermissions => {
 				"messaging permissions spam filters direct messages dm friend requests personalized connected games"
@@ -147,28 +236,41 @@ impl Page {
 			Self::Notifications => {
 				"notifications desktop system alerts overview sounds badges message ring idle away afk timeout lock locked phone mobile push"
 			}
-			Self::Activity => {
-				"game activity playing osu status presence sharing registered games added current game detection detected process program executable rename wrong add hide last played"
-			}
+			Self::Nitro => "nitro premium perks",
+			Self::Boost => "server boost boosts boosting premium guild",
+			Self::Subscriptions => "subscriptions subscription nitro renew billing",
+			Self::Gifts => "gift inventory gifts nitro",
+			Self::Billing => "billing payment methods card transactions history",
 			Self::Voice => {
-				"voice video camera preview audio microphone speakers devices volume gain noise suppression push to talk"
+				"voice video camera preview audio microphone speakers devices volume gain noise suppression push to talk streaming stream preview sounds deafen mute soundboard entrance sounds reset"
+			}
+			Self::Appearance => {
+				"appearance streamer mode obs xsplit customization font typography import ttf otf primary accent hex window effects transparency blur gradient names cosmetics decorations theme dark light system mode layout sidebar width people members member list reset colour color preset chat messages media links confirm confirmation external browser smooth scrolling scroll speed trackpad wheel hidden channels channel list emoji emojis nitro fake suggestions autocomplete locked emoticons chat box automatically convert"
+			}
+			Self::Accessibility => {
+				"accessibility zoom scale density compact spacing reduced motion animate animated gifs autoplay"
+			}
+			Self::General => {
+				"system general windows macos linux login menu bar startup autostart automatically open minimized minimize close tray background title bar caption window buttons decorations borderless tiling graphics gpu adapter render discrete integrated hardware acceleration performance battery vrr variable refresh rate steady refresh rate g-sync gsync freesync adaptive sync flicker flickering steady frame rate fps vsync keybinds keyboard shortcuts custom default formatting navigation"
 			}
 			Self::LanguageTime => {
 				"language time clock 12 hour 24 hour am pm format locale translation"
 			}
-			Self::Storage => "data privacy local storage clear cache drafts credentials",
+			Self::Activity => {
+				"game activity playing osu registered games added current game detection detected process program executable rename wrong add hide last played"
+			}
+			Self::ActivityPrivacy => "activity privacy share sharing status presence game",
+			Self::Connections => "connections connected accounts authorized apps oauth deauthorize",
+			Self::Extensions => "extensions plugins shop store catalog import community tools",
+			Self::Themes => "themes shop store catalog import community appearance colors",
 			Self::Updates => {
 				"updates auto update release channel production stable nightly download restart version check diagnostics issue bug system info debug"
 			}
-			Self::Keybinds => {
-				"system keybinds keyboard shortcuts custom default formatting navigation"
-			}
-			Self::Extensions => "extensions plugins shop store catalog import community tools",
-			Self::Themes => "themes shop store catalog import community appearance colors",
+			Self::Developer => "developer mode copy id ids",
 		};
 		keywords.contains(query)
 			|| self.label(language).to_lowercase().contains(query)
-			|| self.description(language).to_lowercase().contains(query)
+			|| self.row_label(language).to_lowercase().contains(query)
 	}
 }
 
@@ -209,7 +311,10 @@ impl MessagingUi {
 			extensions::AppView::Extensions => Page::Extensions,
 			extensions::AppView::Themes => Page::Themes,
 			extensions::AppView::VoiceSettings => Page::Voice,
-			extensions::AppView::Keybinds => Page::Keybinds,
+			extensions::AppView::Keybinds => {
+				self.open_section(Page::General, KEYBINDS_SECTION);
+				Page::General
+			}
 			extensions::AppView::Storage => Page::Storage,
 			extensions::AppView::Updates => Page::Updates,
 			_ => return,
@@ -265,7 +370,7 @@ impl MessagingUi {
 				.any(|chord| crate::keybinds::pressed(input, chord))
 		}) {
 			self.settings.open = true;
-			self.settings.page = Page::Keybinds;
+			self.open_section(Page::General, KEYBINDS_SECTION);
 			self.settings.query.clear();
 		}
 	}
@@ -285,6 +390,11 @@ impl MessagingUi {
 		self.settings.open && self.settings.page == Page::Voice
 	}
 
+	pub(super) fn open_notification_settings(&mut self) {
+		self.settings.open = true;
+		self.settings.page = Page::Notifications;
+		self.settings.query.clear();
+	}
 	pub(super) fn open_voice_settings(&mut self) {
 		self.settings.open = true;
 		self.settings.page = Page::Voice;
@@ -354,20 +464,20 @@ impl MessagingUi {
 									se: 0,
 								})
 								.inner_margin(egui::Margin {
-									left: 12,
+									left: 10,
 									right: 8,
-									top: 20,
-									bottom: 16,
+									top: 12,
+									bottom: 12,
 								}),
 						)
 						.show(ui, |ui| self.settings_navigation(ui, state));
 				}
 				egui::CentralPanel::default()
 					.frame(egui::Frame::new().inner_margin(egui::Margin {
-						left: if wide { 40 } else { 20 },
-						right: 20,
-						top: 24,
-						bottom: 24,
+						left: if wide { 14 } else { 16 },
+						right: 10,
+						top: 8,
+						bottom: 0,
 					}))
 					.show(ui, |ui| {
 						let editing_theme =
@@ -375,28 +485,20 @@ impl MessagingUi {
 						let heading = if editing_theme {
 							self.language.text("theme-maker")
 						} else {
-							self.settings.page.label(self.language)
+							self.settings.page.row_label(self.language)
 						};
-						let description = if editing_theme {
-							self.language.text("theme-maker-description")
-						} else {
-							self.settings.page.description(self.language)
-						};
-						ui.horizontal_top(|ui| {
-							ui.vertical(|ui| {
-								ui.spacing_mut().item_spacing.y = 2.0;
-								ui.label(
-									design::semibold(ui, &heading, 20.0).color(colors.text_strong),
-								);
-								ui.label(
-									RichText::new(&description).size(13.0).color(colors.muted),
-								);
-							});
-							ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-								if close_control(ui).clicked() {
-									self.settings.open = false;
-								}
-							});
+						ui.horizontal(|ui| {
+							ui.label(
+								design::semibold(ui, &heading, 15.0).color(colors.text_strong),
+							);
+							ui.with_layout(
+								egui::Layout::right_to_left(egui::Align::Center),
+								|ui| {
+									if close_button(ui).clicked() {
+										self.settings.open = false;
+									}
+								},
+							);
 						});
 						if !wide {
 							ui.add_space(8.0);
@@ -439,73 +541,18 @@ impl MessagingUi {
 										self.settings.page as u8,
 									)),
 								);
-								let scroll_padding = if self.settings.page == Page::Profile {
-									8.0
-								} else {
-									0.0
-								};
-								ui.set_width((ui.available_width() - scroll_padding).min(720.0));
-								ui.spacing_mut().item_spacing.y = 12.0;
-								let query = self.settings.query.to_lowercase();
-								if !Page::ALL
-									.into_iter()
-									.any(|p| p.matches(&query, self.language))
-								{
-									ui.label(
-										design::semibold(
-											ui,
-											self.language.text("no-settings-found"),
-											16.0,
-										)
-										.color(colors.text_strong),
+								let full = ui.available_width();
+								let column = (full - 16.0).min(660.0);
+								ui.horizontal_top(|ui| {
+									ui.add_space(
+										((full - column) / 2.0 - ui.spacing().item_spacing.x)
+											.max(0.0),
 									);
-									ui.weak(self.language.text("search-suggestion"));
-									return;
-								}
-								match self.settings.page {
-									Page::General => self.general_settings(ui, state.demo),
-									Page::LanguageTime => self.language_time_settings(ui),
-									Page::Account => self.account_page(ui, state),
-									Page::Profile => self.settings.editor.show(
-										ui,
-										state,
-										&mut self.avatars,
-										commands,
-									),
-									Page::Appearance => self.appearance_settings(ui, state.demo),
-									Page::Chat => self.chat_settings(ui, state.demo),
-									Page::MessagingPermissions => {
-										self.messaging_permissions_settings(ui, state, commands)
-									}
-									Page::Notifications => {
-										self.notification_settings(ui, state.demo)
-									}
-									Page::Activity => self.activity_settings(ui, state),
-									Page::Voice => self.voice_settings_content(
-										ui,
-										state.demo,
-										state.voice.active.is_some(),
-										false,
-									),
-									Page::Storage => self.storage_page(ui, state),
-									Page::Updates => self.update_settings(ui, state.demo),
-									Page::Keybinds => crate::keybinds::show(
-										ui,
-										&mut self.keybinds,
-										&mut self.keybind_capture,
-										self.global_keybind_status,
-									),
-									Page::Extensions | Page::Themes => {
-										self.extensions
-											.select_themes(self.settings.page == Page::Themes);
-										self.extensions.settings(ui, state);
-									}
-								}
-								if state.demo {
-									ui.add_space(20.0);
-									design::hint(ui, &self.language.text("offline-preview"));
-								}
-								ui.add_space(24.0);
+									ui.vertical(|ui| {
+										ui.set_width(column);
+										self.settings_page(ui, state, commands);
+									});
+								});
 							});
 					});
 			});
@@ -525,17 +572,85 @@ impl MessagingUi {
 		}
 	}
 
+	/// The selected page inside the centered content column.
+	fn settings_page(
+		&mut self,
+		ui: &mut egui::Ui,
+		state: &mut State,
+		commands: &mut Vec<client_core::Command>,
+	) {
+		let colors = design::palette(ui);
+		ui.add_space(24.0);
+		ui.spacing_mut().item_spacing.y = 12.0;
+		let query = self.settings.query.to_lowercase();
+		if !Page::ALL
+			.into_iter()
+			.any(|p| p.matches(&query, self.language))
+		{
+			ui.label(
+				design::semibold(ui, self.language.text("no-settings-found"), 16.0)
+					.color(colors.text_strong),
+			);
+			ui.weak(self.language.text("search-suggestion"));
+			return;
+		}
+		if self.settings.sections.page != self.settings.page {
+			self.settings.sections = SectionNav {
+				page: self.settings.page,
+				..SectionNav::default()
+			};
+		}
+		match self.settings.page {
+			Page::General => self.general_settings(ui, state.demo),
+			Page::LanguageTime => self.language_time_settings(ui),
+			Page::Account => self.account_page(ui, state),
+			Page::Profile => self
+				.settings
+				.editor
+				.show(ui, state, &mut self.avatars, commands),
+			Page::Appearance => self.appearance_settings(ui, state.demo),
+			Page::Accessibility => self.accessibility_settings(ui, state.demo),
+			Page::MessagingPermissions => self.messaging_permissions_settings(ui, state, commands),
+			Page::Notifications => self.notification_settings(ui, state.demo),
+			Page::Activity => self.registered_games_settings(ui, state.demo),
+			Page::ActivityPrivacy => self.activity_privacy_settings(ui, state),
+			Page::Voice => self.voice_video_page(ui, state, commands),
+			Page::Storage => self.storage_page(ui, state),
+			Page::Updates => self.update_settings(ui, state.demo),
+			Page::Developer => self.developer_settings(ui),
+			Page::Nitro
+			| Page::Boost
+			| Page::Subscriptions
+			| Page::Gifts
+			| Page::Billing
+			| Page::Connections => self.account_data_page(ui, state, commands, self.settings.page),
+			Page::Extensions | Page::Themes => {
+				self.extensions
+					.select_themes(self.settings.page == Page::Themes);
+				self.extensions.settings(ui, state);
+			}
+		}
+		if state.demo {
+			ui.add_space(20.0);
+			design::hint(ui, &self.language.text("offline-preview"));
+		}
+		ui.add_space(24.0);
+	}
+
 	fn settings_navigation(&mut self, ui: &mut egui::Ui, state: &State) {
 		let colors = design::palette(ui);
 		let language = self.language;
+		self.settings_profile_header(ui, state);
+		ui.add_space(8.0);
+		self.settings_search(ui);
+		ui.add_space(8.0);
 		egui::ScrollArea::vertical()
 			.id_salt("settings-navigation-scroll")
 			.auto_shrink([false, false])
 			.show(ui, |ui| {
 				ui.spacing_mut().item_spacing.y = 2.0;
-				self.settings_search(ui);
-				ui.add_space(12.0);
 				let query = self.settings.query.to_lowercase();
+				let mut first = true;
 				for (heading, pages) in Page::SECTIONS {
 					let visible: Vec<Page> = pages
 						.iter()
@@ -545,71 +660,162 @@ impl MessagingUi {
 					if visible.is_empty() {
 						continue;
 					}
-					ui.add_space(6.0);
-					ui.add(egui::Label::new(design::eyebrow(
-						ui,
-						language.text(heading),
-						colors.muted,
-					)));
-					ui.add_space(2.0);
+					if !first {
+						section_divider(ui);
+					}
+					first = false;
+					if let Some(heading) = heading {
+						ui.horizontal(|ui| {
+							ui.add_space(6.0);
+							ui.label(
+								design::medium(ui, language.text(heading), 12.0)
+									.color(colors.muted),
+							);
+						});
+					}
 					for page in visible {
-						if nav_item(ui, &page.label(language), self.settings.page == page).clicked()
+						let open = self.settings.page == page;
+						if sidebar_row(ui, page.icon(), &page.row_label(language), open, false)
+							.clicked()
 						{
-							if page == Page::MessagingPermissions && self.settings.page != page {
-								self.settings.messaging_permissions.requested = false;
+							self.open_settings_page(page);
+						}
+						if !open {
+							continue;
+						}
+						let sections = page.sections();
+						if sections.len() > 1 {
+							for (index, key) in sections.iter().enumerate() {
+								let active = self.settings.sections.page == page
+									&& self.settings.sections.active == index;
+								if sidebar_sub_row(ui, &language.text(key), active).clicked() {
+									self.open_section(page, index);
+								}
 							}
-							self.settings.page = page;
 						}
-						if page == Page::MessagingPermissions && self.settings.page == page {
-							ui.indent("messaging-permission-sections", |ui| {
-								for tab in crate::messaging_permissions::Tab::ALL {
-									if nav_item(
-										ui,
-										tab.label(),
-										self.settings.messaging_permissions.active == tab,
-									)
-									.clicked()
-									{
-										self.settings.messaging_permissions.jump = Some(tab);
-										self.settings.messaging_permissions.active = tab;
-									}
+						if page == Page::MessagingPermissions {
+							for tab in crate::messaging_permissions::Tab::ALL {
+								if sidebar_sub_row(
+									ui,
+									tab.label(),
+									self.settings.messaging_permissions.active == tab,
+								)
+								.clicked()
+								{
+									self.settings.messaging_permissions.jump = Some(tab);
+									self.settings.messaging_permissions.active = tab;
 								}
-							});
+							}
 						}
-						if page == Page::Notifications && self.settings.page == page {
-							ui.indent("notification-sections", |ui| {
-								for tab in crate::notification_settings::Tab::ALL {
-									if nav_item(
-										ui,
-										tab.label(),
-										self.settings.notifications.active == tab,
-									)
-									.clicked()
-									{
-										self.settings.notifications.jump = Some(tab);
-										self.settings.notifications.active = tab;
-									}
+						if page == Page::Notifications {
+							for tab in crate::notification_settings::Tab::ALL {
+								if sidebar_sub_row(
+									ui,
+									tab.label(),
+									self.settings.notifications.active == tab,
+								)
+								.clicked()
+								{
+									self.settings.notifications.jump = Some(tab);
+									self.settings.notifications.active = tab;
 								}
-							});
+							}
 						}
 					}
 				}
-				ui.add_space(8.0);
-				ui.separator();
-				ui.add_space(4.0);
+				section_divider(ui);
 				self.settings_logout(ui, state.demo);
 				ui.add_space(12.0);
-				ui.label(
-					RichText::new(format!("Serein {}", self.build.version))
-						.size(12.0)
-						.color(colors.muted),
-				);
-				ui.label(
-					RichText::new(language.text("unofficial"))
-						.size(11.0)
-						.color(colors.muted),
-				);
+				ui.horizontal(|ui| {
+					ui.add_space(6.0);
+					ui.label(
+						RichText::new(format!("Serein {}", self.build.version))
+							.size(11.0)
+							.color(colors.muted),
+					);
+				});
 			});
+	}
+
+	fn open_section(&mut self, page: Page, section: usize) {
+		self.open_settings_page(page);
+		self.settings.sections = SectionNav {
+			page,
+			active: section,
+			jump: Some(section),
+		};
+	}
+
+	fn open_settings_page(&mut self, page: Page) {
+		if page == Page::MessagingPermissions && self.settings.page != page {
+			self.settings.messaging_permissions.requested = false;
+		}
+		self.settings.page = page;
+	}
+
+	/// Discord's sidebar header: avatar, name and an edit-profile line that opens Profile.
+	fn settings_profile_header(&mut self, ui: &mut egui::Ui, state: &State) {
+		let colors = design::palette(ui);
+		let name = state.user.as_ref().map_or_else(
+			|| self.language.text("page-account"),
+			|user| user.name.clone(),
+		);
+		let edit = self.language.text("settings-account-page-edit-profile");
+		let (rect, response) =
+			ui.allocate_exact_size(egui::vec2(ui.available_width(), 52.0), egui::Sense::click());
+		response
+			.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), &edit));
+		if response.hovered() || response.has_focus() {
+			ui.painter().rect_filled(rect, 8, colors.hover);
+		}
+		let avatar = egui::Rect::from_center_size(
+			egui::pos2(rect.left() + 26.0, rect.center().y),
+			egui::Vec2::splat(40.0),
+		);
+		let avatar_clicked = ui
+			.scope_builder(egui::UiBuilder::new().max_rect(avatar), |ui| {
+				match &state.user {
+					Some(user) => self
+						.avatars
+						.show_plain(ui, user, 40.0, state.demo)
+						.clicked(),
+					None => {
+						design::avatar(ui, &name, 40.0);
+						false
+					}
+				}
+			})
+			.inner;
+		let left = avatar.right() + 10.0;
+		let width = rect.right() - left - 8.0;
+		paint_truncated(
+			ui,
+			egui::pos2(left, rect.center().y - 9.0),
+			&name,
+			egui::FontId::new(15.0, design::semibold_family(ui.ctx())),
+			colors.text_strong,
+			width,
+		);
+		let (line, _) = paint_truncated(
+			ui,
+			egui::pos2(left, rect.center().y + 10.0),
+			&edit,
+			egui::FontId::new(12.0, design::medium_family(ui.ctx())),
+			colors.muted,
+			width - 18.0,
+		);
+		icons::paint(
+			ui.painter(),
+			icons::Icon::Pencil,
+			egui::Rect::from_center_size(
+				egui::pos2(line.right() + 10.0, line.center().y),
+				egui::Vec2::splat(12.0),
+			),
+			colors.muted,
+		);
+		if response.clicked() || avatar_clicked {
+			self.open_settings_page(Page::Profile);
+		}
 	}
 
 	fn settings_search(&mut self, ui: &mut egui::Ui) {
@@ -645,34 +851,10 @@ impl MessagingUi {
 	}
 
 	fn settings_logout(&mut self, ui: &mut egui::Ui, demo: bool) {
-		let colors = design::palette(ui);
 		let label = self
 			.language
 			.text(if demo { "exit-preview" } else { "log-out" });
-		let (rect, response) =
-			ui.allocate_exact_size(egui::vec2(ui.available_width(), 32.0), egui::Sense::click());
-		response
-			.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), &label));
-		if response.hovered() || response.has_focus() {
-			ui.painter().rect_filled(rect, 4, colors.hover);
-		}
-		ui.painter().text(
-			egui::pos2(rect.left() + 10.0, rect.center().y),
-			egui::Align2::LEFT_CENTER,
-			&label,
-			egui::FontId::new(15.0, design::medium_family(ui.ctx())),
-			colors.danger,
-		);
-		icons::paint(
-			ui.painter(),
-			icons::Icon::External,
-			egui::Rect::from_center_size(
-				egui::pos2(rect.right() - 18.0, rect.center().y),
-				egui::Vec2::splat(16.0),
-			),
-			colors.danger,
-		);
-		if response.clicked() {
+		if sidebar_row(ui, icons::Icon::SignOut, &label, false, true).clicked() {
 			self.logout_requested = true;
 			self.settings.open = false;
 		}
@@ -820,39 +1002,46 @@ impl MessagingUi {
 
 	fn language_time_settings(&mut self, ui: &mut egui::Ui) {
 		let language = self.language;
-		let title = language.text("language-group");
-		design::group(ui, &title, |ui| {
-			let label = language.text("language-label");
-			let description = language.text("language-description");
-			design::row(ui, &label, Some(&description), |ui| {
-				crate::design::Select::from_id_salt("display-language")
-					.selected_text(self.language.name(language))
-					.width(ui.available_width().min(220.0))
-					.show_ui(ui, |ui| {
-						for candidate in Language::ALL {
-							ui.selectable_value(
-								&mut self.language,
-								candidate,
-								candidate.name(language),
-							);
-						}
-					});
-			});
-		});
-		let title = language.text("time-format-group");
-		design::group(ui, &title, |ui| {
-			for (format, key) in [
-				(model::TimeFormat::Auto, "time-format-auto"),
-				(model::TimeFormat::TwelveHour, "time-format-12-hour"),
-				(model::TimeFormat::TwentyFourHour, "time-format-24-hour"),
-			] {
-				if design::radio_row(ui, self.time_format == format, &language.text(key), None)
-					.clicked()
-				{
-					self.time_format = format;
+		let colors = design::palette(ui);
+		ui.spacing_mut().item_spacing.y = 4.0;
+		ui.label(
+			design::semibold(ui, language.text("language-label"), 15.0).color(colors.text_strong),
+		);
+		ui.label(
+			RichText::new(language.text("language-description"))
+				.size(13.0)
+				.color(colors.muted),
+		);
+		ui.add_space(4.0);
+		crate::design::Select::from_id_salt("display-language")
+			.selected_text(self.language.name(language))
+			.width(ui.available_width())
+			.show_ui(ui, |ui| {
+				for candidate in Language::ALL {
+					if language_option(ui, candidate, language, self.language == candidate)
+						.clicked()
+					{
+						self.language = candidate;
+					}
 				}
+			});
+		ui.add_space(24.0);
+		ui.label(
+			design::semibold(ui, language.text("time-format-group"), 15.0)
+				.color(colors.text_strong),
+		);
+		ui.add_space(4.0);
+		for (format, key) in [
+			(model::TimeFormat::Auto, "time-format-auto"),
+			(model::TimeFormat::TwelveHour, "time-format-12-hour"),
+			(model::TimeFormat::TwentyFourHour, "time-format-24-hour"),
+		] {
+			if design::radio_row(ui, self.time_format == format, &language.text(key), None)
+				.clicked()
+			{
+				self.time_format = format;
 			}
-		});
+		}
 		let format = (self.time_format, self.language);
 		if self.settings.language_time_format != Some(format) {
 			crate::local_time::set_format(self.time_format, self.language);
@@ -945,10 +1134,29 @@ impl MessagingUi {
 
 	fn general_settings(&mut self, ui: &mut egui::Ui, _demo: bool) {
 		let language = self.language;
+		section_heading(
+			ui,
+			&mut self.settings.sections,
+			0,
+			&language.text("page-general"),
+		);
 		let title = language.text("general-startup");
 		design::group(ui, &title, |ui| self.startup_switches(ui));
 		let title = language.text("general-window");
 		design::group(ui, &title, |ui| self.window_switches(ui));
+		let title = language.text("settings-sub-custom-keybinds");
+		section_heading(ui, &mut self.settings.sections, 1, &title);
+		crate::keybinds::show_custom(ui, &mut self.keybinds, &mut self.keybind_capture);
+		let title = language.text("settings-sub-default-keybinds");
+		section_heading(ui, &mut self.settings.sections, 2, &title);
+		crate::keybinds::show(
+			ui,
+			&mut self.keybinds,
+			&mut self.keybind_capture,
+			self.global_keybind_status,
+		);
+		let title = language.text("settings-sub-advanced");
+		section_heading(ui, &mut self.settings.sections, 3, &title);
 		let title = language.text("general-graphics");
 		design::group(ui, &title, |ui| {
 			let restart = language.text("general-gpu-restart");
@@ -1080,13 +1288,13 @@ impl MessagingUi {
 	}
 
 	fn appearance_settings(&mut self, ui: &mut egui::Ui, demo: bool) {
-		let colors = design::palette(ui);
-		ui.add_space(4.0);
-		ui.label(design::eyebrow(
+		let language = self.language;
+		section_heading(
 			ui,
-			crate::i18n::translate("settings-appearance-settings-theme"),
-			colors.muted,
-		));
+			&mut self.settings.sections,
+			0,
+			&language.text("settings-sub-theme"),
+		);
 		theme_preference_cards(ui);
 		self.colour_preset_settings(ui);
 		self.custom_font.show(ui);
@@ -1131,6 +1339,153 @@ impl MessagingUi {
 		);
 		self.cosmetic_settings(ui);
 		self.layout_settings(ui, demo);
+		section_heading(
+			ui,
+			&mut self.settings.sections,
+			1,
+			&language.text("settings-sub-messages"),
+		);
+		self.chat_reading_settings(ui, demo);
+		section_heading(
+			ui,
+			&mut self.settings.sections,
+			2,
+			&language.text("settings-sub-chat-box"),
+		);
+		design::card(ui, |ui| {
+			design::switch(
+				ui,
+				"settings-convert-emoticons",
+				Some("settings-convert-emoticons-description"),
+				&mut self.convert_emoticons,
+			);
+			design::card_divider(ui);
+			let mut suggest = !self.hide_nitro_emojis;
+			design::switch(
+				ui,
+				"settings-chat-settings-suggest-nitro-emojis",
+				Some("settings-chat-settings-suggest-nitro-emojis-description"),
+				&mut suggest,
+			);
+			self.hide_nitro_emojis = !suggest;
+		});
+		section_heading(
+			ui,
+			&mut self.settings.sections,
+			3,
+			&language.text("settings-sub-streamer-mode"),
+		);
+		self.streamer_mode_settings(ui);
+		section_heading(
+			ui,
+			&mut self.settings.sections,
+			4,
+			&language.text("settings-sub-advanced"),
+		);
+		design::card(ui, |ui| {
+			design::switch(
+				ui,
+				"settings-chat-settings-show-hidden-channels",
+				Some("settings-chat-settings-show-channels-you-cannot-currently-access"),
+				&mut self.show_hidden_channels,
+			);
+			design::card_divider(ui);
+			design::switch(
+				ui,
+				"settings-preload-on-hover",
+				Some("settings-preload-on-hover-description"),
+				&mut self.preload_on_hover,
+			);
+		});
+	}
+
+	/// Discord's Accessibility page: visual density and reduced motion.
+	fn accessibility_settings(&mut self, ui: &mut egui::Ui, demo: bool) {
+		let language = self.language;
+		let title = language.text("settings-sub-visual-density");
+		section_heading(ui, &mut self.settings.sections, 0, &title);
+		self.density_settings(ui, demo);
+		let title = language.text("settings-sub-reduced-motion");
+		section_heading(ui, &mut self.settings.sections, 1, &title);
+		self.motion_settings(ui, demo);
+	}
+
+	/// Discord's Streamer Mode switches under Appearance.
+	fn streamer_mode_settings(&mut self, ui: &mut egui::Ui) {
+		let colors = design::palette(ui);
+		let streamer = &mut self.streamer_mode;
+		design::card(ui, |ui| {
+			design::switch(
+				ui,
+				"streamer-mode-enable",
+				Some("streamer-mode-enable-description"),
+				&mut streamer.enabled,
+			);
+			design::card_divider(ui);
+			design::switch(ui, "streamer-mode-automatic", None, &mut streamer.automatic);
+			design::card_divider(ui);
+			ui.label(
+				design::semibold(
+					ui,
+					crate::i18n::translate("streamer-mode-when-enabled"),
+					14.0,
+				)
+				.color(colors.text_strong),
+			);
+			for (key, value) in [
+				("streamer-mode-hide-personal", &mut streamer.hide_personal),
+				("streamer-mode-hide-invites", &mut streamer.hide_invites),
+				("streamer-mode-disable-sounds", &mut streamer.disable_sounds),
+				(
+					"streamer-mode-disable-notifications",
+					&mut streamer.disable_notifications,
+				),
+			] {
+				design::card_divider(ui);
+				design::switch(ui, key, None, value);
+			}
+			if cfg!(any(target_os = "windows", target_os = "macos")) {
+				design::card_divider(ui);
+				design::switch(
+					ui,
+					"streamer-mode-hide-window",
+					Some("streamer-mode-hide-window-description"),
+					&mut streamer.hide_window,
+				);
+			}
+		});
+	}
+
+	/// Data & Privacy's voice encryption section.
+	fn voice_encryption_settings(&mut self, ui: &mut egui::Ui, demo: bool) {
+		design::card(ui, |ui| {
+			ui.add_enabled_ui(!demo, |ui| {
+				design::switch(
+					ui,
+					"settings-persistent-verification-codes",
+					Some("settings-persistent-verification-codes-description"),
+					&mut self.persistent_verification_codes,
+				);
+			});
+			if !self.persistent_verification_status.is_empty() {
+				design::hint(
+					ui,
+					&crate::i18n::translate_if_key(self.persistent_verification_status),
+				);
+			}
+		});
+	}
+
+	/// Discord's Developer page.
+	fn developer_settings(&mut self, ui: &mut egui::Ui) {
+		design::card(ui, |ui| {
+			design::switch(
+				ui,
+				"settings-developer-mode",
+				Some("settings-developer-mode-description"),
+				&mut self.developer_mode,
+			);
+		});
 	}
 
 	/// Primary colour picker with its reset; shared by Settings > Appearance and setup.
@@ -1179,51 +1534,6 @@ impl MessagingUi {
 				&crate::i18n::translate("settings-cosmetics-hidden-are-not-downloaded"),
 			);
 		});
-	}
-
-	/// Shows device-local reading, composer and channel-list preferences.
-	fn chat_settings(&mut self, ui: &mut egui::Ui, demo: bool) {
-		self.chat_reading_settings(ui, demo);
-		design::group(ui, &crate::i18n::translate("settings-chat-box"), |ui| {
-			design::switch(
-				ui,
-				"settings-convert-emoticons",
-				Some("settings-convert-emoticons-description"),
-				&mut self.convert_emoticons,
-			);
-		});
-		design::group(
-			ui,
-			&crate::i18n::translate("settings-chat-settings-channel-list"),
-			|ui| {
-				design::switch(
-					ui,
-					"settings-chat-settings-show-hidden-channels",
-					Some("settings-chat-settings-show-channels-you-cannot-currently-access"),
-					&mut self.show_hidden_channels,
-				);
-				design::switch(
-					ui,
-					"settings-preload-on-hover",
-					Some("settings-preload-on-hover-description"),
-					&mut self.preload_on_hover,
-				);
-			},
-		);
-		design::group(
-			ui,
-			&crate::i18n::translate("settings-chat-settings-emoji"),
-			|ui| {
-				let mut suggest = !self.hide_nitro_emojis;
-				design::switch(
-					ui,
-					"settings-chat-settings-suggest-nitro-emojis",
-					Some("settings-chat-settings-suggest-nitro-emojis-description"),
-					&mut suggest,
-				);
-				self.hide_nitro_emojis = !suggest;
-			},
-		);
 	}
 
 	/// Built-in presets plus enabled community themes, one swatch each.
@@ -1281,7 +1591,10 @@ impl MessagingUi {
 		);
 	}
 
-	fn activity_settings(&mut self, ui: &mut egui::Ui, state: &State) {
+	/// Discord's Activity Privacy page: whether the running game is shared.
+	fn activity_privacy_settings(&mut self, ui: &mut egui::Ui, state: &State) {
+		let title = self.language.text("settings-sub-shared-activity");
+		section_heading(ui, &mut self.settings.sections, 0, &title);
 		design::card(ui, |ui| {
 			design::switch(
 				ui,
@@ -1327,11 +1640,11 @@ impl MessagingUi {
 				}
 			});
 		});
-		ui.add_space(24.0);
-		self.registered_games_settings(ui, state.demo);
 	}
 
 	fn storage_page(&mut self, ui: &mut egui::Ui, state: &State) {
+		let title = self.language.text("settings-sub-local-data");
+		section_heading(ui, &mut self.settings.sections, 0, &title);
 		design::group(
 			ui,
 			&crate::i18n::translate("settings-storage-page-local-storage"),
@@ -1381,6 +1694,9 @@ impl MessagingUi {
 				);
 			},
 		);
+		let title = self.language.text("settings-sub-voice-e2ee");
+		section_heading(ui, &mut self.settings.sections, 1, &title);
+		self.voice_encryption_settings(ui, state.demo);
 	}
 }
 
@@ -1599,49 +1915,270 @@ pub(super) fn nav_item(ui: &mut egui::Ui, label: &str, selected: bool) -> egui::
 	}
 }
 
-/// Discord's round close button with the "ESC" hint underneath.
-pub(super) fn close_control(ui: &mut egui::Ui) -> egui::Response {
+/// Paints one line from its left-center point, cut with an ellipsis past `width`. Returns the
+/// painted rect and whether the text was cut.
+fn paint_truncated(
+	ui: &egui::Ui,
+	left_center: egui::Pos2,
+	text: &str,
+	font: egui::FontId,
+	color: egui::Color32,
+	width: f32,
+) -> (egui::Rect, bool) {
+	let mut job = egui::text::LayoutJob::simple_singleline(text.to_owned(), font, color);
+	job.wrap = egui::text::TextWrapping::truncate_at_width(width.max(1.0));
+	let galley = ui.painter().layout_job(job);
+	let rect = egui::Rect::from_min_size(
+		egui::pos2(left_center.x, left_center.y - galley.size().y / 2.0),
+		galley.size(),
+	);
+	let elided = galley.elided;
+	ui.painter().galley(rect.min, galley, color);
+	(rect, elided)
+}
+
+/// Settings sidebar row with its icon; the open row stays filled.
+/// Language list row: flag and native name, and the name in the current language on the right.
+fn language_option(
+	ui: &mut egui::Ui,
+	candidate: Language,
+	current: Language,
+	selected: bool,
+) -> egui::Response {
 	let colors = design::palette(ui);
-	let (rect, response) = ui.allocate_exact_size(egui::vec2(40.0, 56.0), egui::Sense::click());
+	let (rect, response) =
+		ui.allocate_exact_size(egui::vec2(ui.available_width(), 36.0), egui::Sense::click());
+	let native = candidate.name(current);
 	response.widget_info(|| {
-		egui::WidgetInfo::labeled(
-			egui::Role::Button,
-			ui.is_enabled(),
-			crate::i18n::translate("settings-close-control-close-settings-esc"),
-		)
+		egui::WidgetInfo::selected(egui::Role::Button, ui.is_enabled(), selected, &native)
+	});
+	if selected || response.hovered() {
+		let fill = if selected {
+			colors.selected
+		} else {
+			colors.hover
+		};
+		ui.painter().rect_filled(rect, 4, fill);
+	}
+	let mut left = rect.left() + 10.0;
+	if let Some(flag) = candidate
+		.flag()
+		.and_then(|flag| crate::emoji::image(ui.ctx(), flag, 20.0))
+	{
+		flag.paint_at(
+			ui,
+			egui::Rect::from_min_size(
+				egui::pos2(left, rect.center().y - 10.0),
+				egui::Vec2::splat(20.0),
+			),
+		);
+		left += 30.0;
+	}
+	ui.painter().text(
+		egui::pos2(left, rect.center().y),
+		egui::Align2::LEFT_CENTER,
+		native,
+		egui::FontId::proportional(14.0),
+		colors.text_strong,
+	);
+	if let Some(tag) = candidate.preference() {
+		ui.painter().text(
+			rect.right_center() - egui::vec2(10.0, 0.0),
+			egui::Align2::RIGHT_CENTER,
+			current.text(&format!("language-name-{tag}")),
+			egui::FontId::proportional(13.0),
+			colors.muted,
+		);
+	}
+	response
+}
+
+fn sidebar_row(
+	ui: &mut egui::Ui,
+	icon: icons::Icon,
+	label: &str,
+	selected: bool,
+	danger: bool,
+) -> egui::Response {
+	let colors = design::palette(ui);
+	let (rect, response) =
+		ui.allocate_exact_size(egui::vec2(ui.available_width(), 32.0), egui::Sense::click());
+	response.widget_info(|| {
+		egui::WidgetInfo::selected(egui::Role::Button, ui.is_enabled(), selected, label)
 	});
 	let hot = response.hovered() || response.has_focus();
-	let center = egui::pos2(rect.center().x, rect.top() + 18.0);
-	ui.painter().circle(
-		center,
-		18.0,
-		if hot {
-			colors.hover
+	if selected || hot {
+		let fill = if selected {
+			colors.selected
 		} else {
-			egui::Color32::TRANSPARENT
-		},
-		egui::Stroke::new(2.0, if hot { colors.text } else { colors.muted }),
+			colors.hover
+		};
+		ui.painter().rect_filled(rect, 6, fill);
+	}
+	if response.has_focus() {
+		ui.painter().rect_stroke(
+			rect.shrink(1.0),
+			6,
+			egui::Stroke::new(1.0, colors.accent),
+			egui::StrokeKind::Inside,
+		);
+	}
+	let ink = if danger {
+		colors.danger
+	} else if selected || hot {
+		colors.text_strong
+	} else {
+		colors.text
+	};
+	icons::paint(
+		ui.painter(),
+		icon,
+		egui::Rect::from_center_size(
+			egui::pos2(rect.left() + 18.0, rect.center().y),
+			egui::Vec2::splat(18.0),
+		),
+		ink,
 	);
+	let family = if selected {
+		design::semibold_family(ui.ctx())
+	} else {
+		design::medium_family(ui.ctx())
+	};
+	let (_, elided) = paint_truncated(
+		ui,
+		egui::pos2(rect.left() + 36.0, rect.center().y),
+		label,
+		egui::FontId::new(15.0, family),
+		ink,
+		rect.width() - 44.0,
+	);
+	if elided {
+		response.on_hover_text(label)
+	} else {
+		response
+	}
+}
+
+/// Sub-item under an open sidebar row, on a rail below the row's icon.
+fn sidebar_sub_row(ui: &mut egui::Ui, label: &str, selected: bool) -> egui::Response {
+	let label = crate::i18n::translate_if_key(label);
+	let colors = design::palette(ui);
+	let (rect, response) =
+		ui.allocate_exact_size(egui::vec2(ui.available_width(), 28.0), egui::Sense::click());
+	response.widget_info(|| {
+		egui::WidgetInfo::selected(egui::Role::Button, ui.is_enabled(), selected, &label)
+	});
+	let hot = response.hovered() || response.has_focus();
+	let rail = rect.left() + 18.0;
+	let gap = ui.spacing().item_spacing.y;
+	ui.painter().vline(
+		rail,
+		egui::Rangef::new(rect.top() - gap, rect.bottom()),
+		egui::Stroke::new(1.0, colors.border),
+	);
+	if selected {
+		ui.painter().vline(
+			rail,
+			egui::Rangef::new(rect.top() + 2.0, rect.bottom() - 2.0),
+			egui::Stroke::new(2.0, colors.text_strong),
+		);
+	}
+	if response.has_focus() {
+		ui.painter().rect_stroke(
+			rect.shrink(1.0),
+			6,
+			egui::Stroke::new(1.0, colors.accent),
+			egui::StrokeKind::Inside,
+		);
+	}
+	let ink = if selected || hot {
+		colors.text_strong
+	} else {
+		colors.muted
+	};
+	let family = if selected {
+		design::semibold_family(ui.ctx())
+	} else {
+		design::medium_family(ui.ctx())
+	};
+	let (_, elided) = paint_truncated(
+		ui,
+		egui::pos2(rect.left() + 36.0, rect.center().y),
+		&label,
+		egui::FontId::new(14.0, family),
+		ink,
+		rect.width() - 44.0,
+	);
+	if elided {
+		response.on_hover_text(label)
+	} else {
+		response
+	}
+}
+
+/// System's default keybinds section, the target of keybind shortcuts and deep links.
+const KEYBINDS_SECTION: usize = 2;
+
+/// Section title inside a settings page; keeps the sidebar sub-item in step with scrolling and
+/// scrolls here when that sub-item is chosen.
+pub(super) fn section_heading(ui: &mut egui::Ui, nav: &mut SectionNav, index: usize, title: &str) {
+	let colors = design::palette(ui);
+	if index > 0 {
+		ui.add_space(16.0);
+		let (rect, _) =
+			ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
+		ui.painter().hline(
+			rect.x_range(),
+			rect.center().y,
+			egui::Stroke::new(1.0, colors.border),
+		);
+		ui.add_space(16.0);
+	}
+	let heading = ui.label(design::semibold(ui, title, 20.0).color(colors.text_strong));
+	if heading.rect.top() <= ui.clip_rect().top() + 28.0 {
+		nav.active = index;
+	}
+	if nav.jump == Some(index) {
+		ui.scroll_to_rect(heading.rect.expand(8.0), Some(egui::Align::Min));
+		nav.jump = None;
+	}
+}
+
+/// Thin rule between settings sidebar groups.
+fn section_divider(ui: &mut egui::Ui) {
+	let colors = design::palette(ui);
+	ui.add_space(6.0);
+	let (rect, _) =
+		ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
+	ui.painter().hline(
+		rect.shrink2(egui::vec2(6.0, 0.0)).x_range(),
+		rect.center().y,
+		egui::Stroke::new(1.0, colors.border),
+	);
+	ui.add_space(6.0);
+}
+
+/// Plain close button at the top right of the settings content.
+pub(super) fn close_button(ui: &mut egui::Ui) -> egui::Response {
+	let colors = design::palette(ui);
+	let label = crate::i18n::translate("settings-close-control-close-settings-esc");
+	let (rect, response) = ui.allocate_exact_size(egui::Vec2::splat(32.0), egui::Sense::click());
+	response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), &label));
+	let hot = response.hovered() || response.has_focus();
+	if hot {
+		ui.painter().rect_filled(rect, 6, colors.hover);
+	}
 	icons::paint(
 		ui.painter(),
 		icons::Icon::Close,
-		egui::Rect::from_center_size(center, egui::Vec2::splat(16.0)),
+		egui::Rect::from_center_size(rect.center(), egui::Vec2::splat(20.0)),
 		if hot {
 			colors.text_strong
 		} else {
 			colors.muted
 		},
 	);
-	ui.painter().text(
-		egui::pos2(rect.center().x, rect.bottom() - 6.0),
-		egui::Align2::CENTER_CENTER,
-		"ESC",
-		egui::FontId::new(11.0, design::semibold_family(ui.ctx())),
-		colors.muted,
-	);
-	response.on_hover_text(crate::i18n::translate(
-		"settings-close-control-close-settings-esc",
-	))
+	response.on_hover_text(label)
 }
 
 /// Dark, light or system cards with a miniature of each palette and a radio marker.
@@ -1971,7 +2508,8 @@ mod keybind_tests {
 			output.textures_delta.clear();
 			assert_eq!(view.settings.open, !ime);
 			if !ime {
-				assert!(view.settings.page == Page::Keybinds);
+				assert!(view.settings.page == Page::General);
+				assert_eq!(view.settings.sections.jump, Some(KEYBINDS_SECTION));
 				assert!(view.settings.query.is_empty());
 			}
 		}

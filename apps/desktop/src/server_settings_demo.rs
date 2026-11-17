@@ -688,6 +688,7 @@ pub fn open(state: &mut State, messaging: &mut ui::MessagingUi) {
 			guild,
 			request,
 			action,
+			..
 		}) = messaging.preview_server_admin(state, guild, &page)
 			&& !loading
 		{
@@ -838,6 +839,7 @@ fn execute_integrations(
 			channel,
 			name,
 			scope,
+			avatar,
 		} => {
 			page.channel = scope;
 			let items = page.webhooks.as_mut().unwrap();
@@ -848,7 +850,7 @@ fn execute_integrations(
 				channel: Some(channel),
 				kind: 1,
 				name: Some(name),
-				avatar: None,
+				avatar: demo_avatar(avatar, None),
 				application_id: None,
 				user: state.user.clone(),
 				source_guild: None,
@@ -861,6 +863,7 @@ fn execute_integrations(
 			webhook,
 			channel,
 			name,
+			avatar,
 		} => {
 			page.channel = scope;
 			let hook = page
@@ -872,6 +875,7 @@ fn execute_integrations(
 				.unwrap();
 			hook.channel = Some(channel);
 			hook.name = Some(name);
+			hook.avatar = demo_avatar(avatar, hook.avatar.take());
 			page.integrations = None;
 		}
 		Action::DeleteWebhook { webhook, scope } => {
@@ -991,4 +995,13 @@ fn execute_audit_log(
 	};
 	assert!(page.valid_response());
 	model::server_admin::Result::AuditLog(page)
+}
+
+/// Demo webhooks keep a synthetic avatar hash; the uploaded image itself is not stored.
+fn demo_avatar(avatar: model::Patch<String>, current: Option<String>) -> Option<String> {
+	match avatar {
+		model::Patch::Absent => current,
+		model::Patch::Null => None,
+		model::Patch::Value(_) => Some("0".repeat(32)),
+	}
 }

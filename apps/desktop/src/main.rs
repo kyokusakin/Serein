@@ -56,15 +56,18 @@ mod server_settings_demo;
 mod sign_in;
 #[cfg(feature = "demo")]
 mod slash_demo;
+mod soundboard;
 mod spotify;
 mod startup;
 mod sticker_upload;
+mod streamer_mode;
 mod toggle_setting;
 mod tray_window;
 mod updater;
 mod uploads;
 mod video;
 mod voice;
+mod voice_identity;
 mod watch;
 use client_core::{
 	Command, Envelope, Event, State,
@@ -1045,6 +1048,9 @@ struct Desktop {
 	demo_video_autoplay: Option<bool>,
 	notifications: platform::notifications::Notifications,
 	notification_runtime: notification_runtime::Runtime,
+	soundboard: soundboard::Soundboard,
+	streamer_mode: streamer_mode::StreamerMode,
+	voice_identity: voice_identity::Kept,
 	uploads: uploads::Uploads,
 	interaction_files: interaction_uploads::Files,
 	group_icon: group_icon::GroupIcon,
@@ -1052,6 +1058,7 @@ struct Desktop {
 	profile_avatar: group_icon::GroupIcon,
 	server_icon: group_icon::GroupIcon,
 	role_icon: group_icon::GroupIcon,
+	webhook_avatar: group_icon::GroupIcon,
 	role_icon_scope: Option<(u64, model::Id, model::Id, u64)>,
 	emoji_upload: emoji_upload::EmojiUpload,
 	sticker_upload: sticker_upload::StickerUpload,
@@ -1475,6 +1482,13 @@ fn demo_fetch(command: &Command) -> bool {
 		| Command::Search { .. }
 		| Command::ThreadStarter { .. }
 		| Command::ThreadPreview { .. }
+		| Command::ScheduledEvents { .. }
+		| Command::Discovery { .. }
+		| Command::AccountData { .. }
+		| Command::Soundboard(
+			client_core::soundboard::Command::Settings { .. }
+			| client_core::soundboard::Command::Sounds { .. },
+		)
 		| Command::Gifs { .. }
 		| Command::Profile { .. }
 		| Command::StreamPreview { .. }
@@ -1482,6 +1496,293 @@ fn demo_fetch(command: &Command) -> bool {
 		| Command::History { .. } => true,
 		_ => false,
 	}
+}
+
+/// Synthetic soundboard settings and sounds; saves and sends succeed without leaving the device.
+#[cfg(feature = "demo")]
+fn demo_soundboard(
+	state: &State,
+	command: client_core::soundboard::Command,
+) -> client_core::soundboard::Event {
+	use client_core::soundboard::{Command, Event};
+	use model::soundboard::{ALL_SERVERS, JoinSound, Settings, Sound};
+	let sound = |id: u64, name: &str, emoji: &str, guild: Option<model::Id>| Sound {
+		id: model::Id(id),
+		name: name.into(),
+		volume: 1.0,
+		emoji_id: None,
+		emoji_name: Some(emoji.into()),
+		guild,
+		available: true,
+	};
+	let mut settings = state
+		.soundboard
+		.settings()
+		.cloned()
+		.unwrap_or_else(|| Settings {
+			volume: 80.0,
+			join_sounds: vec![(
+				ALL_SERVERS,
+				JoinSound {
+					sound: model::Id(1),
+					guild: None,
+				},
+			)],
+			..Settings::default()
+		});
+	match command {
+		Command::Settings { request } => Event::Settings {
+			request,
+			result: Ok(settings),
+		},
+		Command::Save { edit, request } => {
+			settings.apply(edit);
+			Event::Settings {
+				request,
+				result: Ok(settings),
+			}
+		}
+		Command::Sounds { guild: None } => Event::Sounds {
+			guild: None,
+			result: Ok(vec![
+				sound(1, "quack", "\u{1f986}", None),
+				sound(2, "airhorn", "\u{1f4ef}", None),
+				sound(3, "cricket", "\u{1f997}", None),
+			]),
+		},
+		Command::Sounds { guild: Some(guild) } => Event::Sounds {
+			guild: Some(guild),
+			result: Ok(vec![sound(
+				guild.0 * 100 + 1,
+				"Synthetic cheer",
+				"\u{1f389}",
+				Some(guild),
+			)]),
+		},
+		Command::Send { .. } => Event::Sent { result: Ok(()) },
+	}
+}
+
+/// Synthetic account listings for the Billing and Connections settings pages.
+#[cfg(feature = "demo")]
+fn demo_account_data(
+	state: &client_core::State,
+	section: model::account_data::Section,
+) -> model::account_data::Data {
+	use model::{
+		Id,
+		account_data::{
+			AuthorizedApp, BoostSlot, Connection, Data, Gift, Payment, PaymentSource, Section,
+			Subscription, SubscriptionKind,
+		},
+	};
+	const DAY: i64 = 86_400;
+	let now = std::time::SystemTime::now()
+		.duration_since(std::time::UNIX_EPOCH)
+		.map_or(0, |since| since.as_secs() as i64);
+	match section {
+		Section::Subscriptions => Data::Subscriptions(vec![
+			Subscription {
+				id: Id(9_100),
+				kind: SubscriptionKind::Nitro,
+				status: 1,
+				period_end: Some(now + 18 * DAY),
+				quantity: 1,
+				canceled: false,
+			},
+			Subscription {
+				id: Id(9_101),
+				kind: SubscriptionKind::ServerBoost,
+				status: 1,
+				period_end: Some(now + 18 * DAY),
+				quantity: 2,
+				canceled: false,
+			},
+		]),
+		Section::Boosts => Data::Boosts(
+			(0..3)
+				.map(|index| BoostSlot {
+					id: Id(9_200 + index),
+					guild: state.guilds.get(index as usize).map(|guild| guild.id),
+					canceled: false,
+					cooldown_ends: None,
+				})
+				.collect(),
+		),
+		Section::Gifts => Data::Gifts(vec![Gift {
+			sku: Id(9_300),
+			name: "Nitro".into(),
+			plan: Some("Nitro Monthly".into()),
+			count: 2,
+		}]),
+		Section::Billing => Data::Billing {
+			sources: vec![
+				PaymentSource {
+					id: Id(9_400),
+					kind: 1,
+					brand: Some("visa".into()),
+					last_4: Some("4242".into()),
+					expires: Some((4, 2030)),
+					email: None,
+					default: true,
+					invalid: false,
+				},
+				PaymentSource {
+					id: Id(9_401),
+					kind: 2,
+					brand: None,
+					last_4: None,
+					expires: None,
+					email: Some("synthetic@example.invalid".into()),
+					default: false,
+					invalid: false,
+				},
+			],
+			payments: (0..4)
+				.map(|month| Payment {
+					id: Id(9_500 + month),
+					created: now - (month as i64 * 30 + 12) * DAY,
+					amount: 999,
+					currency: "usd".into(),
+					status: 1,
+					description: "Nitro Monthly".into(),
+				})
+				.collect(),
+		},
+		Section::Connections => Data::Connections {
+			connections: vec![
+				Connection {
+					id: "synthetic-github".into(),
+					kind: "github".into(),
+					name: "synthetic-dev".into(),
+					verified: true,
+					revoked: false,
+				},
+				Connection {
+					id: "synthetic-steam".into(),
+					kind: "steam".into(),
+					name: "Synthetic Player".into(),
+					verified: true,
+					revoked: false,
+				},
+			],
+			apps: vec![AuthorizedApp {
+				id: Id(9_600),
+				application: Id(9_601),
+				name: "Synthetic Bot".into(),
+				icon: None,
+				scopes: vec!["identify".into(), "guilds".into()],
+			}],
+		},
+	}
+}
+
+/// Synthetic public servers; a search keeps the names that contain it.
+#[cfg(feature = "demo")]
+fn demo_discovery(query: &str) -> model::discovery::Page {
+	let servers = [
+		(
+			"Synthetic Gaming Hub",
+			"Find teammates and talk about synthetic games.",
+			48_210,
+			9_120,
+			Some("synthetic-gaming"),
+		),
+		(
+			"Rust Learners",
+			"Ask questions and share small Rust projects.",
+			21_400,
+			3_310,
+			Some("rust-learners"),
+		),
+		(
+			"Lo-fi Study Room",
+			"Quiet voice rooms for studying together.",
+			132_900,
+			18_450,
+			None,
+		),
+		(
+			"Pixel Artists",
+			"Share sprites, palettes and work in progress.",
+			8_760,
+			1_020,
+			Some("pixel-artists"),
+		),
+	];
+	let needle = query.to_lowercase();
+	model::discovery::Page {
+		query: query.to_owned(),
+		items: servers
+			.into_iter()
+			.enumerate()
+			.filter(|(_, (name, ..))| name.to_lowercase().contains(&needle))
+			.map(
+				|(index, (name, description, members, online, vanity))| model::discovery::Server {
+					id: model::Id(99_500 + index as u64),
+					name: name.into(),
+					description: Some(description.into()),
+					icon: None,
+					members,
+					online,
+					vanity: vanity.map(Into::into),
+				},
+			)
+			.collect(),
+	}
+}
+
+/// Synthetic events: one live in the first voice channel and one upcoming elsewhere.
+#[cfg(feature = "demo")]
+fn demo_scheduled_events(
+	state: &client_core::State,
+	guild: model::Id,
+) -> model::scheduled_events::Snapshot {
+	use model::{
+		Id,
+		scheduled_events::{Event, Place, Snapshot, Status},
+	};
+	const HOUR: i128 = 3_600_000_000_000;
+	let now = std::time::SystemTime::now()
+		.duration_since(std::time::UNIX_EPOCH)
+		.map_or(0, |since| since.as_nanos() as i128);
+	let voice = state
+		.channels
+		.iter()
+		.find(|channel| channel.guild == Some(guild) && channel.kind == 2)
+		.map(|channel| channel.id);
+	let mut items = vec![Event {
+		id: Id(guild.0 + 701),
+		name: "Community meetup".into(),
+		description: Some("Introductions, then an open Q&A.".into()),
+		start: now + 26 * HOUR,
+		end: Some(now + 28 * HOUR),
+		status: Status::Scheduled,
+		place: Place::External,
+		location: Some("Central Library, Room 2".into()),
+		interested: Some(14),
+		creator: state.user.clone(),
+		image: None,
+	}];
+	if let Some(voice) = voice {
+		items.insert(
+			0,
+			Event {
+				id: Id(guild.0 + 700),
+				name: "Weekly game night".into(),
+				description: None,
+				start: now - HOUR,
+				end: None,
+				status: Status::Active,
+				place: Place::Voice(voice),
+				location: None,
+				interested: Some(6),
+				creator: state.user.clone(),
+				image: None,
+			},
+		);
+	}
+	Snapshot { guild, items }
 }
 
 /// Synthetic People rows with presence; never a Discord member directory.
@@ -2538,6 +2839,9 @@ impl Desktop {
 				None
 			},
 			notification_runtime: Default::default(),
+			soundboard: Default::default(),
+			streamer_mode: Default::default(),
+			voice_identity: Default::default(),
 			notifications: {
 				let wake = cc.egui_ctx.clone();
 				platform::notifications::Notifications::new(
@@ -2552,6 +2856,7 @@ impl Desktop {
 			profile_avatar: group_icon::GroupIcon::default(),
 			server_icon: group_icon::GroupIcon::default(),
 			role_icon: group_icon::GroupIcon::default(),
+			webhook_avatar: group_icon::GroupIcon::default(),
 			role_icon_scope: None,
 			emoji_upload: emoji_upload::EmojiUpload::default(),
 			sticker_upload: sticker_upload::StickerUpload::default(),
@@ -3650,6 +3955,7 @@ impl Desktop {
 			guild,
 			request,
 			action,
+			..
 		} = &command
 			&& !self
 				.state
@@ -3849,7 +4155,7 @@ impl Desktop {
 			}
 			let event = match command {
 				// Offline typing has no transport or synthetic state change.
-				Command::Typing { .. } => return,
+				Command::Typing { .. } | Command::UploadStreamPreview { .. } => return,
 				// Offline previews confirm locally; nothing reaches the service.
 				Command::BadgeSettings { request, settings } => Event::BadgeSettings {
 					request,
@@ -3868,6 +4174,7 @@ impl Desktop {
 					if matches!(
 						&request.data,
 						client_core::interactions::Data::ApplicationCommand { .. }
+							| client_core::interactions::Data::Autocomplete { .. }
 					) {
 						slash_demo::respond(&mut self.state, request);
 						return;
@@ -3935,6 +4242,7 @@ impl Desktop {
 					guild,
 					request,
 					action,
+					..
 				} => server_settings_demo::execute_admin(&self.state, guild, request, *action),
 				Command::ServerSettings {
 					guild,
@@ -4174,6 +4482,22 @@ impl Desktop {
 						request,
 						result: Ok(message),
 					}
+				}
+				Command::ScheduledEvents { guild, request } => Event::ScheduledEvents {
+					guild,
+					request,
+					result: Ok(demo_scheduled_events(&self.state, guild)),
+				},
+				Command::Discovery { query, request } => Event::Discovery {
+					request,
+					result: Ok(demo_discovery(&query)),
+				},
+				Command::AccountData { section, request } => Event::AccountData {
+					request,
+					result: Ok(demo_account_data(&self.state, section)),
+				},
+				Command::Soundboard(command) => {
+					Event::Soundboard(demo_soundboard(&self.state, command))
 				}
 				Command::ThreadPreview {
 					thread, request, ..
@@ -6250,15 +6574,39 @@ impl eframe::App for Desktop {
 					)
 				}),
 			self.messaging.voice_ptt_active,
-			self.messaging.notification_options,
+			self.messaging.sound_options(),
 			ctx,
 		);
 		self.messaging.voice_ptm_active = self.state.voice.active.is_some()
 			&& (self.messaging.push_to_mute_down(ctx) || self.hotkeys.push_to_mute_down());
+		if !self.state.demo && !self.fixture_only {
+			self.voice_identity.poll(
+				self.state.user.as_ref().map(|user| user.id),
+				self.messaging.persistent_verification_codes,
+				ctx,
+			);
+			self.voice.kept_identity = self.voice_identity.identity();
+			self.messaging.persistent_verification_status = self.voice_identity.status;
+		}
 		if self.state.auth == AuthState::Authenticated || self.state.demo {
 			self.poll_voice(ctx);
+			self.soundboard.poll(
+				&mut self.state,
+				self.messaging.voice_deafened,
+				&self.messaging.voice_soundboard_muted,
+				self.runtime.handle(),
+				ctx,
+			);
+			if let Some(command) = self.state.entrance_sound() {
+				self.command(command);
+			}
 		} else {
 			self.voice.stop();
+			self.soundboard.stop();
+		}
+		if !self.fixture_only {
+			self.streamer_mode
+				.poll(&mut self.messaging.streamer_mode, &self.window, ctx);
 		}
 		self.sync_tray(ctx);
 		if self.state.voice.active.is_some() {
@@ -6527,6 +6875,13 @@ impl eframe::App for Desktop {
 		if let Some((scope, result)) = self.server_icon.poll_server(&self.state) {
 			self.messaging.accept_server_icon(&ctx, scope, result);
 		}
+		if let Some((scope, result)) = self
+			.webhook_avatar
+			.poll_scoped(self.state.generation, |guild| {
+				self.state.guilds.iter().any(|known| known.id == guild)
+			}) {
+			self.messaging.accept_webhook_avatar(&ctx, scope, result);
+		}
 		if let Some((_, result)) = self.role_icon.poll_scoped(self.state.generation, |guild| {
 			self.role_icon_scope.is_some_and(|scope| {
 				scope.1 == guild
@@ -6767,7 +7122,7 @@ impl eframe::App for Desktop {
 				);
 			}
 			self.notifications.set_enabled(
-				self.messaging.notifications_enabled
+				self.messaging.desktop_notifications()
 					&& (!self.fixture_only || self.messaging.notification_test_available),
 			);
 			if std::mem::take(&mut self.messaging.notification_test_requested)
@@ -7022,6 +7377,23 @@ impl eframe::App for Desktop {
 					Err(error) => self
 						.messaging
 						.accept_server_role_icon(&ctx, scope, Err(error)),
+				}
+			}
+			if let Some(scope) = self
+				.messaging
+				.take_webhook_avatar_request(self.state.generation)
+			{
+				let result = self.webhook_avatar.start(
+					scope,
+					self.runtime.handle(),
+					&ctx,
+					self.window.clone(),
+					"Choose webhook avatar",
+					256,
+				);
+				if let Err(error) = result {
+					self.messaging
+						.accept_webhook_avatar(&ctx, scope, Err(error));
 				}
 			}
 			if let Some(scope) = self.messaging.take_server_icon_request() {

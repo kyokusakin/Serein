@@ -535,6 +535,8 @@ async fn run_inner(
 	let mut local_activity = 0;
 	let mut last_speakers = [0; 64];
 	let mut speakers_at = Instant::now();
+	let mut verifying: Option<(u64, tokio::task::JoinHandle<Option<String>>)> = None;
+	let mut verified = 0u64;
 	loop {
 		if let Some(reason) = reconnect.take() {
 			if encryption.is_none() || resume_attempts >= 2 {
@@ -625,6 +627,21 @@ async fn run_inner(
 					   if enabled && !ready_announced {
 						   deadline=None;ready_announced=true;
 						   emit(Status::Ready{privacy_code:dave.session.voice_privacy_code().unwrap_or_default().into()}).map_err(|_|"Call interface closed")?;
+					   }
+					   let wanted=controls.borrow().verify;
+					   if wanted==0 || !enabled {verified=0;}
+					   if verifying.as_ref().is_some_and(|(_,job)|job.is_finished()) && let Some((user,job))=verifying.take() {
+						   verified=user;
+						   emit(Status::VerificationCode{user,code:job.await.ok().flatten()}).map_err(|_|"Call interface closed")?;
+					   }
+					   if enabled && wanted!=0 && wanted!=verified && verifying.is_none() {
+						   match dave.session.get_key_fingerprint_pair(0,wanted) {
+							   // DAVE shows 45 digits in groups of five, derived with scrypt off the media tick.
+							   Ok(pair)=>verifying=Some((wanted,tokio::task::spawn_blocking(move||{
+								   davey::pairwise_fingerprints_internal(pair).ok().and_then(|hash|davey::generate_displayable_code_internal(&hash,45,5).ok())
+							   }))),
+							   Err(_)=>{verified=wanted;emit(Status::VerificationCode{user:wanted,code:None}).map_err(|_|"Call interface closed")?;}
+						   }
 					   }
 					   if enabled && let Some(decoder)=&decoder {
 						   receive_video(&mut receivers,decoder,&mut dave,&mut metrics,None)?;
@@ -3270,7 +3287,8 @@ mod tests {
 							if let Some(sender) = waiting_tx.take() { sender.send(()).unwrap(); }
 						}
 						Status::Connecting | Status::Discovering | Status::Securing
-						| Status::TransportReady | Status::Speaking(_) | Status::CameraAvailable(_) => {}
+						| Status::TransportReady | Status::Speaking(_) | Status::CameraAvailable(_)
+						| Status::VerificationCode { .. } => {}
 						Status::Latency(_) => unreachable!("latency uses its own queue"),
 					},
 					result = &mut captured_rx, if !captured => {

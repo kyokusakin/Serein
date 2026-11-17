@@ -81,6 +81,7 @@ impl Store {
 					}
 					Operation::ForgetAccount(account) => {
 						unacknowledged.remove(&account);
+						let _ = platform::forget_voice_identity(account);
 						Outcome::AccountForgotten(platform::forget_account_session(account))
 					}
 					Operation::RetainAccounts(accounts, active) => {

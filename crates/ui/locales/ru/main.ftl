@@ -1,48 +1,26 @@
 # ru application translations. Edit with Weblate or any Fluent editor.
 
 language-system = Система
-language-group = Язык
 language-label = Отображаемый язык
-language-description = Выберите язык Серейн. Контент Discord никогда не переводится.
-section-user = Пользовательские настройки
-section-app = Приложение
-section-customization = Кастомизация
+language-description = Выберите язык интерфейса Serein.
 page-account = Аккаунт
 page-profile = Профиль
 page-general = Другое
 page-appearance = Оформление
-page-chat = Чат
 page-messaging-permissions = Разрешения чата
 page-notifications = Уведомления
 page-registered-games = Активность
 page-voice = Голос и видео
-page-keybinds = Сочетания клавиш
 page-storage = Данные и конфиденциальность
 page-updates = Обновления
 page-extensions = Расширения
 page-themes = Темы
-description-account = Учетная запись Discord, используемая на этом устройстве.
-description-profile = Выберите, как вы будете выглядеть в Discord.
-description-general = Запуск, поведение окон и графики на этом устройстве.
-description-appearance = Тема, цвета, оконные эффекты и макет.
-description-chat = Как ведут себя сообщения, медиа, ссылки и прокрутка.
-description-messaging-permissions = Контролируйте, кто может связаться с вами и как фильтруются сообщения.
-description-notifications = Выберите, какие уведомления вы будете получать и как они будут отображаться.
-description-registered-games = Делитесь тем, во что играете, и исправляйте или добавляйте игры, найденные Serein.
-description-voice = Микрофон, динамики, камера и обработка голоса.
-description-keybinds = Сочетания клавиш для Серейн.
-description-storage = Что Серейн хранит на этом устройстве.
-description-updates = Держите Серейн в курсе событий на этом устройстве.
-description-extensions = Управляйте плагинами сообщества.
-description-themes = Выберите тему сообщества.
 theme-maker = Создатель тем
-theme-maker-description = Сделайте это своим. Предварительный просмотр изменений в ваших разговорах.
 search = Поиск
 no-settings-found = Настройки не найдены
 search-suggestion = Попробуйте тему, уведомления, голос или кеш.
 exit-preview = Выйти из предварительного просмотра
 log-out = Выйти
-unofficial = Неофициально · не одобрено Discord
 offline-preview = Офлайн-просмотр · изменения остаются в этом сеансе и никогда не отправляются.
 general-startup = Запускать
 general-open-at-startup = Откройте Sein при запуске компьютера
@@ -1499,7 +1477,7 @@ join-server-body-choose-join-server-to-confirm = Выберите «Присое
 # Context: body
 join-server-body-don-t-have-an-invite = Нет приглашения?
 # Context: body
-join-server-body-explore-discoverable-communities-in-discord = Исследуйте доступные для обнаружения сообщества в Discord ↗
+join-server-body-explore-discoverable-communities-in-discord = Исследуйте доступные для обнаружения сообщества в Discord
 # Context: body
 join-server-body-fetching-server-details = Получение сведений о сервере…
 # Context: body
@@ -4895,7 +4873,6 @@ badges-hide-levels = Скрыть уровни
 # Context: badges
 badges-manage = Управление значками
 page-language-time = Язык и время
-description-language-time = Язык интерфейса и формат времени.
 time-format-group = Формат времени
 time-format-auto = Автоматически
 time-format-12-hour = 12-часовой

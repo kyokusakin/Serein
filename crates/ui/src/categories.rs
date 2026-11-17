@@ -465,6 +465,33 @@ fn category_header(
 	response
 }
 
+/// A full-width entry above the channels, such as Events or Browse Channels.
+fn leading_row(ui: &mut egui::Ui, label: &str, icon: crate::icons::Icon) -> egui::Response {
+	let muted = design::palette(ui).muted;
+	let response = ui
+		.scope(|ui| {
+			ui.spacing_mut().button_padding = egui::vec2(36.0, 8.0);
+			ui.add(
+				egui::Button::new(())
+					.left_text(design::medium(ui, label, 15.0).color(muted))
+					.min_size(egui::vec2(ui.available_width(), 34.0))
+					.frame_when_inactive(false)
+					.corner_radius(4),
+			)
+		})
+		.inner;
+	crate::icons::paint(
+		ui.painter(),
+		icon,
+		egui::Rect::from_center_size(
+			egui::pos2(response.rect.left() + 18.0, response.rect.center().y),
+			egui::Vec2::splat(18.0),
+		),
+		muted,
+	);
+	response
+}
+
 fn eyebrow_row(
 	ui: &mut egui::Ui,
 	label: &str,
@@ -742,9 +769,11 @@ impl MessagingUi {
 		let browse = self
 			.guild
 			.filter(|guild| state.channel_list_opt_in(*guild) == Some(true));
+		let events = self.guild;
 		let row_count = self.channel_cache.rows.len()
 			+ usize::from(empty_dms)
 			+ banner_rows
+			+ usize::from(events.is_some())
 			+ usize::from(browse.is_some());
 		let previous_spacing = ui.spacing().item_spacing.y;
 		ui.spacing_mut().item_spacing.y = 0.0;
@@ -765,38 +794,22 @@ impl MessagingUi {
 						);
 						continue;
 					};
+					if let Some(guild) = events {
+						if index == 0 {
+							let label = crate::scheduled_events::label(state, guild);
+							if leading_row(ui, &label, crate::icons::Icon::Calendar).clicked() {
+								self.scheduled_events.request(state, guild);
+							}
+							continue;
+						}
+						index -= 1;
+					}
 					if let Some(guild) = browse {
 						if index == 0 {
-							let response = ui
-								.scope(|ui| {
-									ui.spacing_mut().button_padding = egui::vec2(36.0, 8.0);
-									ui.add(
-										egui::Button::new(())
-											.left_text(
-												design::medium(
-													ui,
-													crate::i18n::translate("channel-browser-title"),
-													15.0,
-												)
-												.color(colors.muted),
-											)
-											.min_size(egui::vec2(ui.available_width(), 34.0))
-											.frame_when_inactive(false)
-											.corner_radius(4),
-									)
-								})
-								.inner;
-							crate::icons::paint(
-								ui.painter(),
+							let response = leading_row(
+								ui,
+								&crate::i18n::translate("channel-browser-title"),
 								crate::icons::Icon::Search,
-								egui::Rect::from_center_size(
-									egui::pos2(
-										response.rect.left() + 18.0,
-										response.rect.center().y,
-									),
-									egui::Vec2::splat(18.0),
-								),
-								colors.muted,
 							);
 							if response.clicked() {
 								self.channel_browser.open(state, guild);
@@ -2231,7 +2244,8 @@ mod tests {
 			}
 			view.timeline.browser_opening = None;
 			let ctx = egui::Context::default();
-			for key in [egui::Key::Tab, egui::Key::Enter] {
+			// The first Tab reaches the server's Events row.
+			for key in [egui::Key::Tab, egui::Key::Tab, egui::Key::Enter] {
 				let output = ctx.run_ui(
 					egui::RawInput {
 						screen_rect: Some(egui::Rect::from_min_size(
@@ -2414,7 +2428,8 @@ mod tests {
 		state.revision += 1;
 		state.invalidate_navigation();
 		let ctx = egui::Context::default();
-		for key in [egui::Key::Tab, egui::Key::Enter] {
+		// The first Tab reaches the server's Events row.
+		for key in [egui::Key::Tab, egui::Key::Tab, egui::Key::Enter] {
 			let input = egui::RawInput {
 				events: vec![egui::Event::Key {
 					key,
@@ -2466,8 +2481,14 @@ mod tests {
 		assert_eq!(state.selected, Some(Id(7)));
 		let ctx = egui::Context::default();
 		let mut picked = None;
-		// The forum row itself is a destination; the second Tab reaches the loaded post.
-		for key in [egui::Key::Tab, egui::Key::Tab, egui::Key::Enter] {
+		// After the Events row, the forum row itself is a destination; the next Tab reaches
+		// the loaded post.
+		for key in [
+			egui::Key::Tab,
+			egui::Key::Tab,
+			egui::Key::Tab,
+			egui::Key::Enter,
+		] {
 			ctx.run_ui(
 				egui::RawInput {
 					events: vec![egui::Event::Key {

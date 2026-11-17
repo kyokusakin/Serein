@@ -160,6 +160,7 @@ pub(crate) fn expected(action: &Action, page: &Snapshot) -> bool {
 			channel,
 			name,
 			scope,
+			avatar,
 		} => {
 			if scope.is_some_and(|scope| scope != *channel) {
 				return page
@@ -172,6 +173,11 @@ pub(crate) fn expected(action: &Action, page: &Snapshot) -> bool {
 					item.id == *webhook
 						&& item.channel == Some(*channel)
 						&& item.name.as_ref() == Some(name)
+						&& match avatar {
+							model::Patch::Absent => true,
+							model::Patch::Null => item.avatar.is_none(),
+							model::Patch::Value(_) => item.avatar.is_some(),
+						}
 				})
 			}) && page.integrations.is_none()
 		}
@@ -414,6 +420,7 @@ mod tests {
 				webhook: Id(4),
 				channel: Id(3),
 				name: "News".into(),
+				avatar: model::Patch::Absent,
 			};
 			assert!(state.integration_action_allowed(Id(2), &edit));
 			assert!(state.integration_action_allowed(
@@ -442,6 +449,7 @@ mod tests {
 				webhook: Id(4),
 				channel: Id(9),
 				name: "News".into(),
+				avatar: model::Patch::Absent,
 			};
 			assert!(!state.integration_action_allowed(Id(2), &moved));
 			assert!(!expected(&moved, &scoped));
@@ -502,6 +510,7 @@ mod tests {
 			webhook: Id(4),
 			channel: Id(3),
 			name: "News".into(),
+			avatar: model::Patch::Absent,
 		};
 		assert!(state.integration_action_allowed(Id(2), &edit));
 		assert!(!state.integration_action_allowed(
@@ -516,7 +525,8 @@ mod tests {
 			&Action::CreateWebhook {
 				scope: None,
 				channel: Id(999),
-				name: "News".into()
+				name: "News".into(),
+				avatar: model::Patch::Absent,
 			}
 		));
 		let Command::ServerAdmin { request, .. } = state

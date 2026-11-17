@@ -46,16 +46,14 @@ impl Admin {
 	}
 	pub fn queue_files(&mut self, paths: Vec<std::path::PathBuf>) {
 		if self.preparing() {
-			self.error =
-				Some("Wait for the current emoji images to finish preparing or uploading.");
+			self.error = Some("server-admin-error-emoji-busy");
 			return;
 		}
 		if paths.len() > 10
 			|| paths.iter().any(|path| path.as_os_str().len() > 32768)
 			|| !self.uploads.is_empty()
 		{
-			self.error =
-				Some("Finish the current uploads first. Choose up to 10 images at a time.");
+			self.error = Some("server-admin-error-emoji-batch");
 			return;
 		}
 		self.files = Some(paths);
@@ -66,8 +64,7 @@ impl Admin {
 		self.files.take()
 	}
 	pub fn navigation_error(&mut self) {
-		self.error =
-			Some("Save or discard your server settings changes before opening the conversation.");
+		self.error = Some("server-admin-error-unsaved-navigation");
 	}
 	pub fn accept_files(
 		&mut self,
@@ -105,7 +102,7 @@ impl Admin {
 					})
 					.collect();
 			}
-			Ok(_) => self.error = Some("The selected images exceed the emoji upload limits."),
+			Ok(_) => self.error = Some("server-admin-error-emoji-limits"),
 		}
 	}
 	pub fn load(&mut self, state: &mut State, guild: Id, members: bool) -> Option<Command> {
@@ -183,9 +180,7 @@ impl Admin {
 					commands.push(command);
 				} else {
 					self.uploading = false;
-					self.error = Some(
-						"This emoji cannot be uploaded. Check its name, available slots, and your permissions.",
-					);
+					self.error = Some("server-admin-error-emoji-upload");
 				}
 			} else {
 				self.uploading = false;
@@ -1095,10 +1090,9 @@ impl Admin {
 		if state.can_kick_guild_member(guild, member.user.id)
 			&& ui
 				.button(
-					RichText::new(format!(
-						"{} {}",
-						crate::i18n::translate("server-admin-member-menu-kick"),
-						member.user.name
+					RichText::new(crate::i18n::translate_args(
+						"moderation-menu-kick",
+						&[("name", &member.user.name)],
 					))
 					.color(colors.danger),
 				)
@@ -1110,12 +1104,15 @@ impl Admin {
 			});
 			ui.close();
 		}
-		ui.separator();
-		if ui
-			.button(crate::i18n::translate(
-				"server-admin-member-menu-copy-user-id",
-			))
-			.clicked()
+		if crate::developer_mode() {
+			ui.separator();
+		}
+		if crate::developer_mode()
+			&& ui
+				.button(crate::i18n::translate(
+					"server-admin-member-menu-copy-user-id",
+				))
+				.clicked()
 		{
 			ui.ctx().copy_text(member.user.id.to_string());
 			ui.close();
@@ -1136,24 +1133,27 @@ impl Admin {
 		let ready = !state.server_admin.pending && !state.server_admin.needs_refresh;
 		let (title, subtitle) = match &*dialog {
 			Dialog::Rename { .. } => (
-				"Rename emoji".to_owned(),
-				"Names use letters, numbers and underscores.".to_owned(),
+				crate::i18n::translate("server-admin-dialog-rename-emoji"),
+				crate::i18n::translate("server-admin-dialog-rename-emoji-hint"),
 			),
 			Dialog::Delete { name, .. } => (
-				"Delete emoji?".to_owned(),
-				format!("Removing :{name}: cannot be undone."),
+				crate::i18n::translate("server-admin-dialog-delete-emoji-title"),
+				crate::i18n::translate_args(
+					"server-admin-dialog-delete-emoji-message",
+					&[("name", name)],
+				),
 			),
 			Dialog::Nickname { .. } => (
-				"Change nickname".to_owned(),
-				"Only affects how this member appears in this server.".to_owned(),
+				crate::i18n::translate("server-admin-member-menu-change-nickname"),
+				crate::i18n::translate("server-admin-dialog-nickname-hint"),
 			),
 			Dialog::Kick { name, .. } => (
-				format!("Kick {name}?"),
-				"They can rejoin using a new invite.".to_owned(),
+				crate::i18n::translate_args("server-admin-dialog-kick-title", &[("name", name)]),
+				crate::i18n::translate("server-admin-dialog-kick-message"),
 			),
 			Dialog::Prune { .. } => (
-				"Prune members".to_owned(),
-				"Removes inactive members who hold no additional roles.".to_owned(),
+				crate::i18n::translate("server-admin-dialog-prune-title"),
+				crate::i18n::translate("server-admin-dialog-prune-message"),
 			),
 		};
 		let destructive = matches!(
@@ -1225,7 +1225,11 @@ impl Admin {
 							crate::dialog::notice(
 								ui,
 								crate::dialog::Level::Warning,
-								&format!("{count} members would be removed."),
+								&crate::i18n::translate_count(
+									"server-admin-dialog-prune-count",
+									count as usize,
+									&[],
+								),
 							);
 						}
 					}

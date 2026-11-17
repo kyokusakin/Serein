@@ -464,17 +464,36 @@ fn moderation_menu(
 	user: &User,
 	action: &mut Option<Action>,
 ) {
-	use crate::moderation::Kind;
-	let kinds: Vec<_> = [Kind::Timeout, Kind::Kick, Kind::Ban]
-		.into_iter()
-		.filter(|kind| state.server_admin_action_allowed(guild, &kind.action(user.id, 0)))
-		.collect();
+	let kinds = moderation_kinds(state, guild, user);
 	if kinds.is_empty() {
 		return;
 	}
-	let danger = crate::design::palette(ui).danger;
 	ui.separator();
-	for kind in kinds {
+	moderation_items(ui, guild, user, &kinds, action);
+}
+
+/// Timeout, kick and ban, limited to those you may apply to this member.
+pub(super) fn moderation_kinds(
+	state: &State,
+	guild: model::Id,
+	user: &User,
+) -> Vec<crate::moderation::Kind> {
+	use crate::moderation::Kind;
+	[Kind::Timeout, Kind::Kick, Kind::Ban]
+		.into_iter()
+		.filter(|kind| state.server_admin_action_allowed(guild, &kind.action(user.id, 0)))
+		.collect()
+}
+
+pub(super) fn moderation_items(
+	ui: &mut egui::Ui,
+	guild: model::Id,
+	user: &User,
+	kinds: &[crate::moderation::Kind],
+	action: &mut Option<Action>,
+) {
+	let danger = crate::design::palette(ui).danger;
+	for &kind in kinds {
 		let label = crate::i18n::translate_args(kind.menu_key(), &[("name", &user.name)]);
 		if ui
 			.button(egui::RichText::new(label).color(danger))
@@ -491,7 +510,7 @@ fn moderation_menu(
 }
 
 /// Toggles assignable server roles on a member shown in the selected channel's live list.
-fn roles_menu(
+pub(super) fn roles_menu(
 	ui: &mut egui::Ui,
 	state: &State,
 	guild: model::Id,

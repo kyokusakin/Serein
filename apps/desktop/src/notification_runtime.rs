@@ -143,7 +143,7 @@ impl Runtime {
 	) -> Option<Alert> {
 		let live = !fixture && !state.demo && state.auth == AuthState::Authenticated;
 		let audible = live && ui.own_presence.status != PresenceStatus::DoNotDisturb;
-		let options = ui.notification_options;
+		let options = ui.sound_options();
 		let badges = platform::badge::supported() && options.unread_badge;
 		if options != self.options || (self.was_audible && !audible) {
 			self.sounds.stop();
@@ -223,7 +223,7 @@ impl Runtime {
 		ringing: Option<(Id, Sound)>,
 		now: Instant,
 	) -> (Option<Alert>, Option<Sound>) {
-		let options = ui.notification_options;
+		let options = ui.sound_options();
 		let mut alert = None;
 		let mut sound = None;
 		let one_ping = ui.interface_tweak_on(extensions::InterfaceTweak::OnePingPerDirectMessage);
@@ -240,7 +240,7 @@ impl Runtime {
 			} else {
 				Sound::Message
 			};
-			let desktop = audible && ui.notifications_enabled && !current;
+			let desktop = audible && ui.desktop_notifications() && !current;
 			let audio = audible && options.allows(cue);
 			let key = (
 				notification.is_direct(),

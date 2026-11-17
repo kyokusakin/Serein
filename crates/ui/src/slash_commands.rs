@@ -15,6 +15,9 @@ const HEADING: f32 = 30.0;
 const FOOTER: f32 = 26.0;
 const HELP: f32 = 44.0;
 const CHIP: f32 = 32.0;
+const SUGGESTION_ROW: f32 = 40.0;
+/// Seconds of typing pause before an application is asked for suggestions.
+const SUGGEST_DELAY: f64 = 0.25;
 const NO_PERMISSION: &str = "You don't have permission to use this command in this channel.";
 
 #[derive(Clone)]
@@ -60,6 +63,12 @@ pub(super) struct Menu {
 	argument_rect: Option<egui::Rect>,
 	focus_argument: bool,
 	focused_option: usize,
+	/// The autocomplete option being typed, when its text last changed, and the
+	/// suggestion values shown for it.
+	suggesting: Option<String>,
+	typed_at: Option<f64>,
+	suggestions: Vec<String>,
+	suggestion: usize,
 	pub active: Option<Active>,
 	pub error: Option<&'static str>,
 	pub run: bool,
@@ -274,6 +283,25 @@ impl Menu {
 					}
 				)
 			});
+			if self.active.is_some() && !self.suggestions.is_empty() {
+				let count = self.suggestions.len();
+				if input.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown) {
+					self.suggestion = (self.suggestion + 1) % count;
+				}
+				if input.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp) {
+					self.suggestion = (self.suggestion + count - 1) % count;
+				}
+				if input.consume_key(egui::Modifiers::NONE, egui::Key::Tab)
+					|| input.consume_key(egui::Modifiers::NONE, egui::Key::Enter)
+				{
+					self.pick_suggestion(self.suggestion);
+					return None;
+				}
+				if input.consume_key(egui::Modifiers::NONE, egui::Key::Escape) {
+					self.close_suggestions();
+					return None;
+				}
+			}
 			if input.consume_key(egui::Modifiers::NONE, egui::Key::Escape) {
 				self.dismissed = true;
 				return None;
@@ -301,6 +329,44 @@ impl Menu {
 			None
 		})
 	}
+	fn close_suggestions(&mut self) {
+		self.suggesting = None;
+		self.typed_at = None;
+		self.suggestions.clear();
+		self.suggestion = 0;
+	}
+	fn pick_suggestion(&mut self, index: usize) {
+		if let (Some(value), Some(option), Some(active)) = (
+			self.suggestions.get(index),
+			&self.suggesting,
+			self.active.as_mut(),
+		) && let Some((_, slot)) = active.values.iter_mut().find(|(name, _)| name == option)
+		{
+			slot.clone_from(value);
+		}
+		self.close_suggestions();
+	}
+	/// Asks for suggestions for the option being typed once typing pauses.
+	pub fn suggestion_request(
+		&mut self,
+		ctx: &egui::Context,
+		state: &mut State,
+	) -> Option<Command> {
+		let at = self.typed_at?;
+		let wait = at + SUGGEST_DELAY - ctx.input(|input| input.time);
+		if wait > 0.0 {
+			ctx.request_repaint_after(std::time::Duration::from_secs_f64(wait));
+			return None;
+		}
+		self.typed_at = None;
+		let active = self.active.as_ref()?;
+		state.request_suggestions(
+			active.id,
+			&active.path,
+			&active.values,
+			self.suggesting.as_deref()?,
+		)
+	}
 	pub fn accept(&mut self, pick: Pick, draft: &mut String, remaining: usize) -> Option<usize> {
 		let completion = format!("/{} ", pick.name);
 		if completion.capacity() > remaining.saturating_add(draft.capacity()) {
@@ -318,6 +384,7 @@ impl Menu {
 		self.dismissed = false;
 		self.focus_argument = self.active.is_some();
 		self.focused_option = 0;
+		self.close_suggestions();
 		Some(draft.chars().count())
 	}
 	pub fn show(
@@ -329,9 +396,34 @@ impl Menu {
 		avatars: &mut Avatars,
 	) -> Option<Pick> {
 		self.rect = None;
+		self.suggestions.clear();
 		if !self.visible() {
 			return None;
 		}
+		let choices: Vec<&model::application_commands::Choice> = match (
+			&self.active,
+			&self.suggesting,
+			&state.interactions.suggestions,
+		) {
+			(Some(active), Some(option), Some(found))
+				if found.command == active.id && found.option == *option =>
+			{
+				found.choices.iter().collect()
+			}
+			_ => Vec::new(),
+		};
+		self.suggestions = choices
+			.iter()
+			.map(|choice| value_text(&choice.value))
+			.collect();
+		self.suggestion = self
+			.suggestion
+			.min(self.suggestions.len().saturating_sub(1));
+		let list = if choices.is_empty() {
+			0.0
+		} else {
+			choices.len().min(6) as f32 * SUGGESTION_ROW + 9.0
+		};
 		let colors = design::palette(ui);
 		let bounds = ui.ctx().content_rect().shrink(8.0);
 		let width = anchor.width().min(bounds.width());
@@ -351,7 +443,7 @@ impl Menu {
 			.len() + usize::from(pending);
 		let rows = self.items.len() + placeholders;
 		let height = if self.active.is_some() {
-			HELP
+			HELP + list
 		} else if flat {
 			(HEADING + (rows.clamp(1, 6) as f32) * ROW + 10.0 + footer_height).min(420.0)
 		} else {
@@ -391,14 +483,76 @@ impl Menu {
 					egui::StrokeKind::Inside,
 				);
 				if self.active.is_some() {
+					let help = egui::Rect::from_min_size(rect.min, egui::vec2(rect.width(), HELP));
 					let mut body = ui.new_child(
 						egui::UiBuilder::new()
-							.max_rect(rect.shrink2(egui::vec2(14.0, 0.0)))
+							.max_rect(help.shrink2(egui::vec2(14.0, 0.0)))
 							.layout(egui::Layout::left_to_right(egui::Align::Center)),
 					);
-					body.set_clip_rect(rect.shrink(1.0));
+					body.set_clip_rect(help.shrink(1.0));
 					body.spacing_mut().item_spacing.x = 8.0;
 					self.help(&mut body, state, channel);
+					if choices.is_empty() {
+						return;
+					}
+					ui.painter().hline(
+						help.x_range().shrink(1.0),
+						help.bottom(),
+						egui::Stroke::new(1.0, colors.border),
+					);
+					let area = egui::Rect::from_min_max(
+						egui::pos2(rect.left() + 6.0, help.bottom() + 4.0),
+						rect.max - egui::vec2(6.0, 4.0),
+					);
+					let mut rows = ui.new_child(
+						egui::UiBuilder::new()
+							.id_salt("command-suggestions")
+							.max_rect(area),
+					);
+					rows.set_clip_rect(area);
+					rows.spacing_mut().item_spacing.y = 0.0;
+					let mut clicked = None;
+					egui::ScrollArea::vertical()
+						.max_height(area.height())
+						.auto_shrink([false, true])
+						.show(&mut rows, |ui| {
+							for (index, choice) in choices.iter().enumerate() {
+								let (row, response) = ui.allocate_exact_size(
+									egui::vec2(ui.available_width(), SUGGESTION_ROW),
+									egui::Sense::click(),
+								);
+								if response.hovered()
+									&& ui.input(|input| input.pointer.delta() != egui::Vec2::ZERO)
+								{
+									self.suggestion = index;
+								}
+								if index == self.suggestion {
+									ui.painter().rect_filled(row, 4, colors.hover);
+								}
+								let mut job = egui::text::LayoutJob::simple_singleline(
+									choice.name.clone(),
+									egui::FontId::new(15.0, design::medium_family(ui.ctx())),
+									colors.text_strong,
+								);
+								job.wrap.max_width = (row.width() - 20.0).max(1.0);
+								job.wrap.max_rows = 1;
+								let galley = ui.fonts_mut(|fonts| fonts.layout_job(job));
+								ui.painter().galley(
+									egui::pos2(
+										row.left() + 10.0,
+										row.center().y - galley.size().y * 0.5,
+									),
+									galley,
+									colors.text_strong,
+								);
+								if response.clicked() {
+									clicked = Some(index);
+								}
+							}
+						});
+					if let Some(index) = clicked {
+						self.pick_suggestion(index);
+					}
 					return;
 				}
 				if flat {
@@ -956,6 +1110,20 @@ impl Menu {
 								}
 								if response.has_focus() || response.hovered() {
 									self.focused_option = index;
+								}
+								if response.gained_focus() || response.changed() {
+									if option.autocomplete {
+										let now = ui.input(|input| input.time);
+										self.suggesting = Some(option.name.clone());
+										self.typed_at = Some(if response.changed() {
+											now
+										} else {
+											now - SUGGEST_DELAY
+										});
+									} else {
+										self.suggesting = None;
+										self.typed_at = None;
+									}
 								}
 							},
 						);

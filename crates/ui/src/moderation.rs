@@ -264,6 +264,7 @@ pub(crate) mod tests {
 					guild,
 					request,
 					action,
+					..
 				}) => Some((guild, request, *action)),
 				_ => None,
 			}

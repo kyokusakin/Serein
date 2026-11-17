@@ -76,7 +76,14 @@ pub(super) fn show(
 		capturing,
 	);
 	show_voice(ui, bindings, capturing, global_status);
-	ui.add_space(10.0);
+}
+
+/// Extra bindings the user adds on top of the fixed rows.
+pub(super) fn show_custom(
+	ui: &mut egui::Ui,
+	bindings: &mut Keybinds,
+	capturing: &mut Option<CaptureTarget>,
+) {
 	custom_section(ui, bindings, capturing);
 }
 

@@ -1875,11 +1875,12 @@ fn message_actions(
 			ui.ctx().copy_text(link.to_owned());
 			ui.close();
 		}
-		if ui
-			.button(crate::i18n::translate(
-				"timeline-message-actions-copy-message-id",
-			))
-			.clicked()
+		if crate::developer_mode()
+			&& ui
+				.button(crate::i18n::translate(
+					"timeline-message-actions-copy-message-id",
+				))
+				.clicked()
 		{
 			ui.ctx().copy_text(message.id.to_string());
 			ui.close();
@@ -4744,14 +4745,16 @@ impl TimelineView {
 								egui::StrokeKind::Inside,
 							);
 							if shift {
-								copy_action_button(
-									&mut toolbar,
-									crate::icons::Icon::Hash,
-									"timeline-message-actions-copy-message-id",
-									egui::Id::unique(("copy-id", state.generation, id)),
-									&mut self.copy_feedback,
-									|| id.to_string(),
-								);
+								if crate::developer_mode() {
+									copy_action_button(
+										&mut toolbar,
+										crate::icons::Icon::Hash,
+										"timeline-message-actions-copy-message-id",
+										egui::Id::unique(("copy-id", state.generation, id)),
+										&mut self.copy_feedback,
+										|| id.to_string(),
+									);
+								}
 								if let Some(link) = &link {
 									copy_action_button(
 										&mut toolbar,
@@ -7949,6 +7952,7 @@ mod tests {
 
 	#[test]
 	fn quick_reactions_shift_actions_and_double_click_use_existing_paths() {
+		crate::set_developer_mode(true);
 		fn texts(shape: &egui::Shape, out: &mut Vec<(String, egui::Rect)>) {
 			match shape {
 				egui::Shape::Text(t) => out.push((

@@ -1935,6 +1935,12 @@ async fn run_recoverable(
 											}
 										}
 									}
+									"VOICE_CHANNEL_EFFECT_SEND" => {
+										// Ephemeral like typing: a malformed effect is dropped.
+										if let Ok(Some(effect))=discord_protocol::soundboard::effect(packet.d.get().as_bytes()) {
+											emit(Event::Soundboard(client_core::soundboard::Event::Played(effect)))?;
+										}
+									}
 									"TYPING_START" => {
 										// Malformed ephemeral signals must not interrupt message delivery.
 										if let Ok(typing)=discord_protocol::typing::decode(packet.d.get().as_bytes()) {
@@ -1992,7 +1998,7 @@ async fn run_recoverable(
 											emit(Event::AccountSettings { status: touched.status, folders: touched.folders })?;
 										}
 									}
-									"INTERACTION_SUCCESS" | "INTERACTION_FAILURE" | "INTERACTION_MODAL_CREATE" => { if let Some(event) = interactions::event(packet.t.as_deref().unwrap_or_default(),packet.d.get().as_bytes())? { emit(event)?; } },
+									"INTERACTION_SUCCESS" | "INTERACTION_FAILURE" | "INTERACTION_MODAL_CREATE" | "APPLICATION_COMMAND_AUTOCOMPLETE_RESPONSE" => { if let Some(event) = interactions::event(packet.t.as_deref().unwrap_or_default(),packet.d.get().as_bytes())? { emit(event)?; } },
 									"MESSAGE_CREATE" => {
 										let message = decode::<MessageDto>(packet.d.get().as_bytes()).map_err(|_| Failure::Protocol)?.into_model();
 										if message.ephemeral { emit(Event::Interaction(client_core::interactions::Event::Ephemeral(Box::new(message))))?; }

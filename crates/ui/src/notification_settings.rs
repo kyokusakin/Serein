@@ -18,6 +18,18 @@ impl MessagingUi {
 			secs => secs,
 		}
 	}
+	/// Sound choices in effect: Streamer Mode can silence every cue without changing them.
+	pub fn sound_options(&self) -> model::notification_preferences::Device {
+		model::notification_preferences::Device {
+			disable_sounds: self.notification_options.disable_sounds
+				|| self.streamer_mode.mutes_sounds(),
+			..self.notification_options
+		}
+	}
+	/// Desktop alerts in effect: Streamer Mode can hold them without changing the preference.
+	pub fn desktop_notifications(&self) -> bool {
+		self.notifications_enabled && !self.streamer_mode.mutes_notifications()
+	}
 }
 
 /// Whole minutes; an account value between presets rounds to the nearest minute.
@@ -81,61 +93,6 @@ mod tests {
 				output.drop_without_applying_deltas();
 				labels
 			};
-			let labels = render(&mut view, vec![]);
-			for label in [
-				"Overview",
-				"Sounds",
-				"Badges",
-				"Enable Unread Message Badge",
-				"Incoming Ring",
-				"Microphone Muted",
-				"Microphone Unmuted",
-				"Deafen",
-				"Undeafen",
-				"Sound Volume",
-				"Disable All Notification Sounds",
-			] {
-				assert!(
-					labels.iter().any(|(s, _)| s.eq_ignore_ascii_case(label)),
-					"missing {label}"
-				);
-			}
-			for label in ["Email", "Advanced", "Friends come online"] {
-				assert!(!labels.iter().any(|(s, _)| s == label), "stale {label}");
-			}
-			for (label, sound) in [
-				("Outgoing Ring", Sound::OutgoingRing),
-				("Camera On", Sound::CameraOn),
-				("Screen Share Started", Sound::ScreenShareOn),
-				("Call Joined", Sound::UserJoin),
-				("User Left Call", Sound::UserLeave),
-				("Push to Talk Activate", Sound::PttStart),
-				("Push to Talk Deactivate", Sound::PttStop),
-				("Viewer Joined Stream", Sound::ViewerJoin),
-			] {
-				let point = labels
-					.iter()
-					.skip_while(|(text, _)| text != label)
-					.find(|(text, _)| text == "Preview Sound")
-					.unwrap_or_else(|| panic!("missing preview for {label}"))
-					.1
-					.center();
-				for pressed in [true, false] {
-					render(
-						&mut view,
-						vec![
-							egui::Event::PointerMoved(point),
-							egui::Event::PointerButton {
-								pos: point,
-								button: egui::PointerButton::Primary,
-								pressed,
-								modifiers: egui::Modifiers::NONE,
-							},
-						],
-					);
-				}
-				assert_eq!(view.notification_preview.take(), Some(sound));
-			}
 			let labels = render(&mut view, vec![]);
 			let point = labels
 				.iter()
@@ -272,99 +229,24 @@ impl MessagingUi {
 				&mut self.notification_options.disable_sounds,
 			);
 			design::card_divider(ui);
-			let sounds = vec![
-				(
-					"New Message",
-					&mut self.notification_options.new_message,
-					Sound::Message,
-				),
-				(
-					"New Message in the channel I'm currently reading",
-					&mut self.notification_options.current_channel,
-					Sound::CurrentChannel,
-				),
-				(
-					"Incoming Ring",
-					&mut self.notification_options.incoming_ring,
-					Sound::IncomingRing,
-				),
-				(
-					"Outgoing Ring",
-					&mut self.notification_options.outgoing_ring,
-					Sound::OutgoingRing,
-				),
-				(
-					"Microphone Muted",
-					&mut self.notification_options.mute,
-					Sound::Mute,
-				),
-				(
-					"Microphone Unmuted",
-					&mut self.notification_options.unmute,
-					Sound::Unmute,
-				),
-				(
-					"notification-settings-notification-settings-push-to-talk-activate",
-					&mut self.notification_options.ptt_start,
-					Sound::PttStart,
-				),
-				(
-					"notification-settings-notification-settings-push-to-talk-deactivate",
-					&mut self.notification_options.ptt_stop,
-					Sound::PttStop,
-				),
-				(
-					"Deafen",
-					&mut self.notification_options.deafen,
-					Sound::Deafen,
-				),
-				(
-					"Undeafen",
-					&mut self.notification_options.undeafen,
-					Sound::Undeafen,
-				),
-				(
-					"Camera On",
-					&mut self.notification_options.camera_on,
-					Sound::CameraOn,
-				),
-				(
-					"Screen Share Started",
-					&mut self.notification_options.screen_share_on,
-					Sound::ScreenShareOn,
-				),
-				(
-					"Call Joined",
-					&mut self.notification_options.user_join,
-					Sound::UserJoin,
-				),
-				(
-					"User Left Call",
-					&mut self.notification_options.user_leave,
-					Sound::UserLeave,
-				),
-				(
-					"Viewer Joined Stream",
-					&mut self.notification_options.viewer_join,
-					Sound::ViewerJoin,
-				),
-			];
-			for (index, (label, value, sound)) in sounds.into_iter().enumerate() {
-				if index > 0 {
-					design::card_divider(ui);
-				}
-				design::switch(ui, label, None, value);
-				if design::text_action(
-					ui,
-					&crate::i18n::translate(
-						"notification-settings-notification-settings-preview-sound",
+			let options = &mut self.notification_options;
+			crate::voice_video::sound_rows(
+				ui,
+				vec![
+					("sound-message", &mut options.new_message, Sound::Message),
+					(
+						"sound-current-channel",
+						&mut options.current_channel,
+						Sound::CurrentChannel,
 					),
-				)
-				.clicked()
-				{
-					self.notification_preview = Some(sound);
-				}
-			}
+					(
+						"sound-incoming-ring",
+						&mut options.incoming_ring,
+						Sound::IncomingRing,
+					),
+				],
+				&mut self.notification_preview,
+			);
 			if !self.notification_sound_status.is_empty() {
 				design::card_divider(ui);
 				design::notice(ui, design::Level::Warning, self.notification_sound_status);

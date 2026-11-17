@@ -1,5 +1,5 @@
-//! Phosphor Icons (MIT), Simple Icons brand marks (CC0) and the Serein mark rasterized once
-//! into one bundled atlas and tinted at draw time.
+//! Discord interface glyphs, Phosphor Icons (MIT), Simple Icons brand marks (CC0) and the
+//! Serein mark rasterized once into one bundled atlas and tinted at draw time.
 //!
 //! `assets/icons/atlas.png` holds white glyphs on transparency in fixed 64px cells;
 //! `index.tsv` maps upstream icon names to cells. See `assets/icons/README.md` for provenance.
@@ -130,13 +130,29 @@ pub enum Icon {
 	Cut,
 	Paste,
 	SelectAll,
+	User,
+	ChatDots,
+	Nitro,
+	Boost,
+	Subscriptions,
+	Gift,
+	CreditCard,
+	Palette,
+	Accessibility,
+	Keyboard,
+	Translate,
+	ActivityPrivacy,
+	Code,
+	SignOut,
+	Puzzle,
+	PaintBrush,
 	/// Horizontally mirrored reply glyph from the shared atlas.
 	Forward,
 }
 
 impl Icon {
 	/// Canonical atlas cells; Forward reuses the mirrored Reply cell.
-	pub const ALL: [Icon; 111] = [
+	pub const ALL: [Icon; 127] = [
 		Icon::ChevronDown,
 		Icon::ChevronRight,
 		Icon::Gear,
@@ -248,6 +264,22 @@ impl Icon {
 		Icon::Cut,
 		Icon::Paste,
 		Icon::SelectAll,
+		Icon::User,
+		Icon::ChatDots,
+		Icon::Nitro,
+		Icon::Boost,
+		Icon::Subscriptions,
+		Icon::Gift,
+		Icon::CreditCard,
+		Icon::Palette,
+		Icon::Accessibility,
+		Icon::Keyboard,
+		Icon::Translate,
+		Icon::ActivityPrivacy,
+		Icon::Code,
+		Icon::SignOut,
+		Icon::Puzzle,
+		Icon::PaintBrush,
 	];
 	/// Upstream icon name recorded in `index.tsv`.
 	fn asset(self) -> &'static str {
@@ -363,6 +395,22 @@ impl Icon {
 			Icon::Cut => "scissors",
 			Icon::Paste => "clipboard-text",
 			Icon::SelectAll => "selection-all",
+			Icon::User => "user",
+			Icon::ChatDots => "chat-circle-dots",
+			Icon::Nitro => "tire",
+			Icon::Boost => "diamond",
+			Icon::Subscriptions => "arrows-clockwise",
+			Icon::Gift => "gift",
+			Icon::CreditCard => "credit-card",
+			Icon::Palette => "palette",
+			Icon::Accessibility => "person-arms-spread",
+			Icon::Keyboard => "keyboard",
+			Icon::Translate => "translate",
+			Icon::ActivityPrivacy => "user-focus",
+			Icon::Code => "code",
+			Icon::SignOut => "sign-out",
+			Icon::Puzzle => "puzzle-piece",
+			Icon::PaintBrush => "paint-brush",
 		}
 	}
 	fn cell(self) -> usize {

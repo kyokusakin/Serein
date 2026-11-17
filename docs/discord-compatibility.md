@@ -1,5 +1,47 @@
 # Discord compatibility — checked 2026-09-10
 
+## Soundboard, Streamer Mode, stream previews and voice verification — November 18, 2026
+
+Soundboard. The documented routes `GET /soundboard-default-sounds`,
+`GET /guilds/{guild}/soundboard-sounds` and `POST /channels/{channel}/send-soundboard-sound`
+(`sound_id`, optional `source_guild_id`) list and play sounds; lists are capped at 512 sounds.
+Played sounds arrive as the documented `VOICE_CHANNEL_EFFECT_SEND` dispatch (payloads above
+16 KiB or volumes outside 0 to 1 are rejected; emoji-only effects are ignored). Audio comes from
+`https://cdn.discordapp.com/soundboard-sounds/{sound}` without credentials, at most 1 MiB per
+file, with the last 16 files kept in memory. Deafening, the per-member Mute Soundboard switch
+and Streamer Mode's sound switch silence playback locally.
+
+Soundboard volume, stream previews and entrance sounds are **unofficial** settings-proto 1
+fields: voice settings field 9 (`soundboard_settings.volume`, 0 to 100) and field 10
+(`disable_stream_previews`), and per-guild field 6 (entrance sound: sound id, source guild)
+under guild settings field 3, where guild 0 is the all-servers choice. Edits rewrite only the
+touched field, send `required_data_version`, and are accepted only when the returned settings
+match. On joining a server voice channel with Nitro, the server's entrance sound (or the
+all-servers one) is sent once per connection through the documented send route. Live acceptance
+and how other clients play it are **unverified**.
+
+Stream previews. While this device shares its screen, a 512-pixel JPEG of the shared frame is
+posted to `POST /streams/{stream_key}/preview` as `{"thumbnail": "data:image/jpeg;base64,…"}`
+5 seconds after the stream starts and every 5 minutes after that. The route and body are
+**unofficial**; frames above 256 KiB or without a JPEG header are not sent.
+
+Streamer Mode is device-local, like Discord's: it hides email, connected accounts, notes and
+invite codes, silences sounds and notifications, optionally excludes Serein's windows from
+capture, and can turn itself on while OBS or XSplit runs. Nothing is sent to Discord.
+
+Voice verification. "View Verification Code" in the voice member menu shows the 45-digit DAVE
+pairwise code (nine groups of five) derived from both participants' key fingerprints, computed
+off the media thread. The derivation follows the DAVE protocol as implemented by the vendored
+`davey` crate; agreement with codes shown by the official client is **unverified**. Persistent
+verification codes keep one voice encryption identity per account in the OS credential store,
+so the code stays the same across calls; the setting is unavailable without a credential store.
+
+The voice member menu follows Discord's order and adds server deafen through the documented
+member `deaf` field with `DEAFEN_MEMBERS`. Mute Soundboard and Disable Video are local
+switches for at most 64 members each. Your own server nickname is changed through the documented
+`PATCH /guilds/{guild}/members/@me` with `CHANGE_NICKNAME`; another member's uses
+`PATCH /guilds/{guild}/members/{user}` with `MANAGE_NICKNAMES`.
+
 ## Game mentions (October 14, 2026)
 
 The native composer offers `@game`, a searchable game catalog and application references
@@ -355,9 +397,15 @@ included only for guild-scoped definitions, independently of the invocation chan
 See the [official command schema](https://docs.discord.com/developers/interactions/application-commands)
 and [maintained submission implementation](https://github.com/dolfies/discord.py-self/blob/master/discord/commands.py#L931-L973).
 
-Autocomplete requests and attachment arguments are not implemented. An autocomplete-enabled
-scalar accepts a manually entered value; required attachment arguments block submission with
-an explicit explanation, while optional attachments can remain omitted. Commands run only
+Autocomplete (unofficial, November 17, 2026): typing in an autocomplete-enabled option sends
+interaction type 4 after a 250 ms pause, with the same command data as type 2, the typed text
+as a string and `focused: true` on that option. Other values are included only when they
+already parse. The `APPLICATION_COMMAND_AUTOCOMPLETE_RESPONSE` dispatch is matched by nonce;
+only the latest request applies, at most 25 choices of at most 100 characters are kept, and a
+failure clears the list. Suggestions never occupy the single running-interaction slot. Choosing
+one fills the option with the choice value. Attachment arguments are not implemented: required
+attachment arguments block submission with an explicit explanation, while optional attachments
+can remain omitted. Commands run only
 after an explicit submit and are never automatically replayed. Existing Gateway success,
 failure, modal and private-reply handling is reused; HTTP acceptance is not application
 completion. Offline fixtures and loopback HTTP checks cover the local contract; live
@@ -2010,8 +2058,7 @@ invite URL, choose **Check Invite**, review the server, then choose **Join Serve
 The explicit lookup reuses the 32-entry/4-KiB-per-preview/five-minute cache and
 single in-flight lookup guard; automatic message cards still require readable history.
 Input is limited to 512 characters/2048 bytes, with invite codes limited to 100 ASCII
-characters. Dialog state clears across account generations. Discovery opens Discord's
-public server directory in the browser; native Discovery is not implemented.
+characters. Dialog state clears across account generations. The Discovery link opens native Discovery.
 
 
 ### Account activity sharing and server observations (September 11, 2026)
@@ -2376,7 +2423,10 @@ move to another permitted channel, and confirmed delete reuse the existing worke
 Moving a webhook refreshes the original channel and removes it from that list.
 Guild-wide app integrations remain under Server Settings. Scope and permissions
 are rechecked for responses and writes; existing item/byte limits still apply.
-The shared editor supports explicit Copy Webhook URL for incoming webhooks; avatar uploads remain unsupported.
+The shared editor supports explicit Copy Webhook URL for incoming webhooks. A webhook avatar
+is chosen with the native image picker, scaled to a PNG data URI within the server-icon limit,
+and sent with the [documented create/modify webhook](https://docs.discord.com/developers/resources/webhook#modify-webhook)
+request; the saved avatar hash is checked in the response.
 Synthetic checks do not establish live normal-account interoperability.
 
 ### Server integrations (September 12, 2026)
@@ -3371,3 +3421,51 @@ Speculative reads do not wait for occupied admission. Cancellation releases a
 reservation, and security stops wake admission/cooldown waiters before dispatch.
 A solved verification is rechecked for expiry after both waits, before submission.
 There are no new writes, retries, persistence, telemetry or proxy-routing changes.
+
+## Server Events and Discovery — November 17, 2026
+
+The channel list starts with an **Events** row. Opening it reads the
+[documented scheduled events list](https://docs.discord.com/developers/resources/guild-scheduled-event#list-scheduled-events-for-guild)
+with `with_user_count=true`, at most 100 events and 1 MiB of response. Unknown statuses and
+entity types are skipped; an external event without a location rejects the response. Only the
+latest request for the open server applies. The list shows scheduled and active events with
+time, interested count, creator, description and place. Creating events and marking interest
+are not implemented.
+
+Discovery is a rail button under **Add a Server**. It reads the unofficial
+`GET /discoverable-guilds?limit=48` featured list or `GET /discoverable-guilds/search` with
+the typed query (at most 100 characters), keeping only id, name, description, icon,
+approximate counts and vanity code for at most 48 servers within 2 MiB of response and
+128 KiB of state. Entries outside those bounds are skipped. Choosing a server with a vanity
+code opens **Join a Server** with that code filled in; the invite is still checked and joined
+only on confirmation. Servers without a vanity code are listed but cannot be joined from here.
+Categories and server previews are not implemented. Synthetic fixtures cover parsing, bounds
+and state ordering; live normal-account behaviour is unverified.
+
+## Read-only account pages — November 17, 2026
+
+User Settings lists Discord's Billing group (Nitro, Server Boost, Subscriptions, Gift
+Inventory, Billing) and Connected Apps. Each page reads its listing when it opens and keeps
+only the latest page's result in memory; nothing is persisted. Requests and bounds:
+
+- Nitro and Subscriptions: unofficial `GET /users/@me/billing/subscriptions`
+  ([userdoccers](https://docs.discord.food/resources/subscription)).
+- Server Boost: unofficial `GET /users/@me/guilds/premium/subscription-slots`.
+- Gift Inventory: unofficial `GET /users/@me/entitlements/gifts`
+  ([userdoccers](https://docs.discord.food/resources/entitlement)); unredeemed gifts are
+  grouped by product and plan.
+- Billing: unofficial `GET /users/@me/billing/payment-sources` and
+  `GET /users/@me/billing/payments?limit=50`
+  ([userdoccers](https://docs.discord.food/resources/billing)). Only brand, last four
+  digits, expiry, PayPal email, default and invalid flags are kept for a payment method.
+- Connected Apps: the [documented](https://docs.discord.com/developers/resources/user#get-current-user-connections)
+  `GET /users/@me/connections` and the unofficial `GET /oauth2/tokens`.
+
+Each response is limited to 1 MiB and 200 entries (50 transactions), and the kept listing to
+256 KiB. Unknown subscription types are skipped; malformed card digits or currency codes
+reject the listing. Purchases, cancellations, redeeming codes, adding payment methods,
+connecting accounts and deauthorizing apps are not implemented. Synthetic fixtures cover
+parsing, bounds and request ordering; live normal-account behaviour is unverified.
+
+Developer Mode (User Settings > Developer) is a device preference, off by default. Copy ID
+entries for channels, members and messages appear only while it is on.

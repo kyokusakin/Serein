@@ -1,5 +1,21 @@
 # Local storage policy and audit
 
+## Streamer Mode, voice identity and soundboard (November 18, 2026)
+
+- Streamer Mode: seven switches in the `app_preferences` singleton (at most 16 KiB); older rows
+  load Discord's defaults. Nothing about it leaves the device.
+- Persistent verification codes: an opt-in preference. While on, one voice encryption private
+  key per account (at most 64 bytes) is kept in the OS credential store under
+  `voice-identity.<account id>`, read on a worker and held in memory only for calls. It is never
+  written to a file: without a credential store the setting reports itself unavailable. Turning
+  the setting off deletes the entry.
+- Voice member switches: Mute Soundboard and Disable Video each keep at most 64 user IDs in the
+  same singleton, beside the existing per-user volumes and mutes.
+- Soundboard audio: the last 16 played sound files, each at most 1 MiB, stay in memory only and
+  are dropped on exit. Sound lists and settings are held in memory; settings live in Discord's
+  account settings, not on disk.
+- Stream previews: the encoded JPEG (at most 256 KiB) is held only until it is uploaded.
+
 ## Discord device state (November 13, 2026)
 
 REST now keeps the cookies Discord sets, as a browser profile does, so each launch is the same
@@ -869,6 +885,7 @@ The owner explicitly withdrew the no-storage policy on 2026-09-09. Local files, 
 | Audio devices, input profile/custom processing, push-to-talk and gain | Device-wide `app_preferences` SQLite singleton, bounded to 16 KiB; device names ≤1,024 bytes each | Retained across restart/logout; demo changes remain in memory |
 | Automatic emoticon conversion | Boolean in the existing device-wide `app_preferences` singleton; defaults off, including older saved preferences | Retained across restart/logout; converts standalone emoticons on message send/edit; demo changes remain in memory |
 | Preload on hover | Boolean in the existing device-wide `app_preferences` singleton; defaults off (the official client sends no such requests); a value already saved is kept, and preferences saved before the setting existed read as off | Retained across restart/logout; off stops conversation, profile and GIF picker preloads; demo never preloads conversations or profiles |
+| Developer Mode | Boolean in the existing device-wide `app_preferences` singleton; defaults off, including older saved preferences | Retained across restart/logout; shows Copy ID menu entries; demo changes remain in memory |
 | Collapsed message requests | Boolean in the existing device-wide `app_preferences` singleton; defaults open, including older saved preferences | Retained across restart/logout; only the home list section folds, pending requests remain accessible from its header |
 | Steady refresh rate | Boolean in the existing device-wide `app_preferences` singleton; defaults off, including older saved preferences | Retained across restart/logout; applies immediately; demo changes remain in memory |
 | Steady refresh rate offer answered | Boolean in the existing device-wide `app_preferences` singleton; defaults unanswered, including older saved preferences | Retained across restart/logout; set by either answer to the one-time G-SYNC offer or by turning the setting on; unreadable preferences count as answered; demo changes remain in memory |

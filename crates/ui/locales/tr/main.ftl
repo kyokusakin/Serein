@@ -1,48 +1,26 @@
 # tr application translations. Edit with Weblate or any Fluent editor.
 
 language-system = Sistem
-language-group = Dil
 language-label = Ekran dili
-language-description = Serein'in dilini seçin. Discord içeriği asla çevrilmez.
-section-user = Kullanıcı ayarları
-section-app = Uygulama ayarları
-section-customization = Özelleştirme
+language-description = Serein'in görüntüleneceği dili seç.
 page-account = Hesabım
 page-profile = Profil
 page-general = Genel
 page-appearance = Dış görünüş
-page-chat = Sohbet
 page-messaging-permissions = Mesajlaşma İzinleri
 page-notifications = Bildirimler
 page-registered-games = Kayıtlı Oyunlar
 page-voice = Ses ve Video
-page-keybinds = Tuş bağlantıları
 page-storage = Veri ve Gizlilik
 page-updates = Güncellemeler
 page-extensions = Uzantılar
 page-themes = Temalar
-description-account = Bu cihazda Discord hesabıyla oturum açıldı.
-description-profile = Discord'da nasıl görüneceğinizi seçin.
-description-general = Bu cihazdaki başlatma, pencere ve grafik davranışı.
-description-appearance = Tema, renkler, pencere efektleri ve düzen.
-description-chat = Mesajların, medyanın, bağlantıların ve kaydırmanın nasıl davrandığı.
-description-messaging-permissions = Sizinle kimlerin iletişim kurabileceğini ve mesajların nasıl filtreleneceğini kontrol edin.
-description-notifications = Hangi bildirimleri alacağınızı ve bunların nasıl görüneceğini seçin.
-description-registered-games = Ne oynadığınızı paylaşın, Serein'in algıladığı oyunları düzeltin veya ekleyin.
-description-voice = Mikrofon, hoparlörler, kamera ve ses işleme.
-description-keybinds = Serein için klavye kısayolları.
-description-storage = Serein'in bu cihazda sakladıkları.
-description-updates = Bu cihazda Serein'i güncel tutun.
-description-extensions = Topluluk eklentilerini yönetin.
-description-themes = Bir topluluk teması seçin.
 theme-maker = Tema oluşturucu
-theme-maker-description = Senin olsun. Konuşmalarınızdaki değişiklikleri önizleyin.
 search = Aramak
 no-settings-found = Hiçbir ayar bulunamadı
 search-suggestion = Temayı, bildirimleri, sesi veya önbelleği deneyin.
 exit-preview = Önizlemeden çık
 log-out = Oturumu kapat
-unofficial = Resmi değil · Discord tarafından onaylanmadı
 offline-preview = Çevrimdışı önizleme · değişiklikler bu oturumda kalır ve hiçbir zaman gönderilmez.
 general-startup = Başlatmak
 general-open-at-startup = Bilgisayarınız başladığında Serein'i açın
@@ -1499,7 +1477,7 @@ join-server-body-choose-join-server-to-confirm = Onaylamak için Sunucuya Katıl
 # Context: body
 join-server-body-don-t-have-an-invite = Davetiniz yok mu?
 # Context: body
-join-server-body-explore-discoverable-communities-in-discord = Discord'daki keşfedilebilir toplulukları keşfedin ↗
+join-server-body-explore-discoverable-communities-in-discord = Discord'daki keşfedilebilir toplulukları keşfedin
 # Context: body
 join-server-body-fetching-server-details = Sunucu ayrıntıları getiriliyor…
 # Context: body
@@ -4871,7 +4849,6 @@ badges-hide-levels = Seviyeleri gizle
 # Context: badges
 badges-manage = Rozetleri yönet
 page-language-time = Dil ve Saat
-description-language-time = Arayüz dili ve saatin gösterimi.
 time-format-group = Saat biçimi
 time-format-auto = Otomatik
 time-format-12-hour = 12 saat

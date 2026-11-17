@@ -30,6 +30,27 @@ fn parse_id(value: &str) -> Option<Id> {
 	value.parse::<u64>().ok().filter(|id| *id != 0).map(Id)
 }
 
+/// The stream key Discord gives this account's own stream in a server channel or a call.
+pub fn own_key(guild: Option<Id>, channel: Id, user: Id) -> String {
+	match guild {
+		Some(guild) => format!("guild:{guild}:{channel}:{user}"),
+		None => format!("call:{channel}:{user}"),
+	}
+}
+
+/// Largest JPEG accepted for the stream preview others see before joining.
+pub const MAX_THUMBNAIL_BYTES: usize = 256 * 1024;
+
+/// Unofficial `POST /streams/{key}/preview` body: one JPEG as a data URI.
+pub fn thumbnail_body(jpeg: &[u8]) -> Option<serde_json::Value> {
+	use base64::{Engine as _, engine::general_purpose::STANDARD};
+	(jpeg.len() <= MAX_THUMBNAIL_BYTES && jpeg.starts_with(&[0xff, 0xd8, 0xff])).then(|| {
+		serde_json::json!({
+			"thumbnail": format!("data:image/jpeg;base64,{}", STANDARD.encode(jpeg)),
+		})
+	})
+}
+
 #[derive(Deserialize)]
 pub struct Created {
 	pub stream_key: String,
@@ -118,6 +139,22 @@ mod tests {
 		}
 		let long = format!("guild:1:2:{}", "3".repeat(120));
 		assert_eq!(target(&long), None, "overlong keys name nothing");
+		for (guild, key) in [(Some(Id(1)), "guild:1:2:3"), (None, "call:2:3")] {
+			assert_eq!(target(&super::own_key(guild, Id(2), Id(3))), target(key));
+		}
+	}
+
+	#[test]
+	fn stream_thumbnails_must_be_bounded_jpegs() {
+		let jpeg = [0xff, 0xd8, 0xff, 0xe0, 1, 2];
+		assert_eq!(
+			super::thumbnail_body(&jpeg).unwrap()["thumbnail"],
+			"data:image/jpeg;base64,/9j/4AEC"
+		);
+		assert!(super::thumbnail_body(b"\x89PNG\r\n\x1a\n").is_none());
+		let mut oversized = vec![0; super::MAX_THUMBNAIL_BYTES + 1];
+		oversized[..3].copy_from_slice(&[0xff, 0xd8, 0xff]);
+		assert!(super::thumbnail_body(&oversized).is_none());
 	}
 
 	#[test]

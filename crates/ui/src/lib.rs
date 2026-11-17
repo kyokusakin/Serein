@@ -57,6 +57,24 @@ mod emoji_picker;
 mod emoticons;
 pub mod fonts;
 pub mod i18n;
+thread_local! {
+	/// Discord's Developer Mode: Copy ID entries appear in menus only while it is on.
+	static DEVELOPER_MODE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+	static STREAMER_MODE: std::cell::Cell<model::streamer_mode::StreamerMode> =
+		std::cell::Cell::new(model::streamer_mode::StreamerMode::default());
+}
+pub(crate) fn developer_mode() -> bool {
+	DEVELOPER_MODE.with(std::cell::Cell::get)
+}
+/// Discord's Streamer Mode as this frame sees it.
+pub(crate) fn streamer_mode() -> model::streamer_mode::StreamerMode {
+	STREAMER_MODE.with(std::cell::Cell::get)
+}
+#[cfg(test)]
+pub(crate) fn set_developer_mode(on: bool) {
+	DEVELOPER_MODE.with(|mode| mode.set(on));
+}
+
 #[cfg(all(debug_assertions, feature = "demo"))]
 pub fn debug_channel_creation(state: client_core::State) {
 	channel_menu::debug_creation(state);
@@ -92,8 +110,10 @@ mod timestamp_picker;
 pub fn synthetic_own_profile(user: &model::User) -> model::UserProfile {
 	profiles::synthetic(user, None)
 }
+mod account_pages;
 mod contact_editor;
 pub mod dialog;
+mod discovery;
 mod join_server;
 mod keybinds;
 mod name_styles;
@@ -103,6 +123,7 @@ mod profile_edit;
 mod reactions;
 mod reading;
 mod registered_games;
+mod scheduled_events;
 pub mod screen;
 pub mod scroll;
 mod search;
@@ -142,6 +163,8 @@ mod user_direct;
 mod user_menu;
 mod verification;
 mod voice;
+mod voice_member_menu;
+mod voice_video;
 use client_core::{Command, MAX_DRAFT_BYTES, NavStep, State};
 use egui::{RichText, TextEdit};
 use model::{Freshness, Id};
@@ -286,6 +309,14 @@ pub struct MessagingUi {
 	pub language: i18n::Language,
 	forwarding: forwarding::ForwardDialog,
 	pub convert_emoticons: bool,
+	/// Device preference: Discord's Developer Mode.
+	pub developer_mode: bool,
+	/// Device preference: Discord's Streamer Mode.
+	pub streamer_mode: model::streamer_mode::StreamerMode,
+	/// Device preference: keep this device's voice encryption identity between calls.
+	pub persistent_verification_codes: bool,
+	/// Why persistent verification codes could not be kept, shown under the switch.
+	pub persistent_verification_status: &'static str,
 	/// Device preference: request a conversation's page while the pointer rests on it.
 	pub preload_on_hover: bool,
 	preload: preload::Preload,
@@ -308,6 +339,8 @@ pub struct MessagingUi {
 	server_menu: server_menu::ServerMenu,
 	channel_menu: channel_menu::ChannelMenu,
 	channel_browser: channel_browser::ChannelBrowser,
+	scheduled_events: scheduled_events::EventsUi,
+	discovery: discovery::DiscoveryUi,
 	pub channel_preferences: model::ChannelPreferences,
 	pub channel_preferences_changed: bool,
 	pub channel_preferences_loaded: bool,
@@ -551,6 +584,18 @@ pub struct MessagingUi {
 	voice_user_volumes: Option<Box<[(u64, u16); 64]>>,
 	/// Speakers silenced on this device only; never sent to Discord.
 	voice_user_muted: Vec<u64>,
+	/// Participants whose soundboard sounds this device does not play, at most 64.
+	pub voice_soundboard_muted: Vec<u64>,
+	/// Participants whose camera this device does not show, at most 64.
+	pub voice_video_disabled: Vec<u64>,
+	/// Own mute (`false`) or deafen (`true`) toggled from the voice member menu.
+	voice_self_toggle: Option<bool>,
+	/// Server nickname being edited from a member menu.
+	member_nickname: Option<voice_member_menu::NicknameEdit>,
+	/// Call participant whose end-to-end verification code is open.
+	pub voice_verify: Option<Id>,
+	/// That participant's code; `None` inside means they are outside the encrypted group.
+	pub voice_verification_code: Option<(Id, Option<String>)>,
 	pub voice_refresh_devices: bool,
 	pub voice_device_status: &'static str,
 	pub voice_microphone_unavailable: bool,
@@ -4380,6 +4425,9 @@ impl MessagingUi {
                             stacked
                         };
                         ctx.data_mut(|d| d.insert_temp(stack_id, (stacked, height)));
+                        if let Some(command) = self.slash_commands.suggestion_request(ctx, state) {
+                            commands.push(command);
+                        }
                         if std::mem::take(&mut self.slash_commands.retry)
                             && let Some(command) = state.request_application_commands(channel, true) {
                             commands.push(command);
@@ -4875,6 +4923,8 @@ impl MessagingUi {
 	/// Draws one frame of the signed-in client and returns the commands it produced for the
 	/// service layer.
 	pub fn show(&mut self, ui: &mut egui::Ui, state: &mut State) -> Vec<Command> {
+		DEVELOPER_MODE.with(|mode| mode.set(self.developer_mode));
+		STREAMER_MODE.with(|mode| mode.set(self.streamer_mode));
 		interface_tweaks::publish(ui.ctx(), &self.interface_tweaks);
 		rtl::scope(
 			ui.ctx(),
@@ -5304,6 +5354,14 @@ impl MessagingUi {
 		}
 		self.channel_browser
 			.show(&ctx, state, self.guild, &mut commands);
+		self.scheduled_events
+			.show(&ctx, state, self.guild, &mut self.avatars, &mut commands);
+		if let Some(code) = self
+			.discovery
+			.show(&ctx, state, &mut self.avatars, &mut commands)
+		{
+			self.join_server.open_with(state.generation, code);
+		}
 		if let Some(guild) = self.server_menu.settings_requested.take()
 			&& let Some(command) = self.preview_server_settings(state, guild)
 		{
@@ -6195,7 +6253,8 @@ impl MessagingUi {
 		if self.menu_role_change && !state.server_admin.pending {
 			self.menu_role_change = false;
 			if let Some(error) = state.server_admin.error {
-				self.toasts.push(design::Level::Error, error);
+				self.toasts
+					.push(design::Level::Error, crate::i18n::translate_if_key(error));
 			}
 			// Settings own the admin state while open; otherwise drop the reload fence.
 			if !self.server_settings.is_open() {
@@ -6369,6 +6428,9 @@ impl MessagingUi {
 			) {
 			commands.push(command);
 		}
+		self.apply_voice_self_toggle(state, &mut commands);
+		self.member_nickname_dialog(&ctx, state, &mut commands);
+		self.verification_code_dialog(&ctx, state);
 		self.verification.show(&ctx, state);
 		// Discord's notice for a rate-limited send; the messages stay queued and go out on their own.
 		if state.send_throttled {

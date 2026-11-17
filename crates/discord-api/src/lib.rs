@@ -1,5 +1,6 @@
 // Origin-fixed REST adapter. No redirects, logging or bot SDK; the only persistence is the
 // bounded Discord device state in `device`.
+mod account_data;
 mod activity_sharing;
 mod admission;
 mod archives;
@@ -8,6 +9,7 @@ mod channel_actions;
 mod collectibles;
 pub mod detectable;
 pub mod device;
+mod discovery;
 pub mod external_assets;
 mod forum;
 mod gif_favorites;
@@ -19,6 +21,8 @@ mod messaging_permissions;
 mod onboarding;
 mod profile_edit;
 mod restrictions;
+mod scheduled_events;
+mod soundboard;
 #[cfg(debug_assertions)]
 pub use profile_edit::debug_profile_board_request_check;
 pub mod proxy;
@@ -1250,7 +1254,8 @@ impl DiscordApi {
 				guild,
 				request,
 				action,
-			} => Event::ServerAdmin(self.server_admin(guild, request, &action).await),
+				account,
+			} => Event::ServerAdmin(self.server_admin(guild, request, &action, account).await),
 			Command::ServerSettings {
 				guild,
 				request,
@@ -1482,6 +1487,48 @@ impl DiscordApi {
 				request,
 				result: self.thread_preview(guild, thread, needs_channel).await,
 			},
+			Command::ScheduledEvents { guild, request } => Event::ScheduledEvents {
+				guild,
+				request,
+				result: self.scheduled_events(guild).await,
+			},
+			Command::Discovery { query, request } => Event::Discovery {
+				request,
+				result: self.discovery(&query).await,
+			},
+			Command::AccountData { section, request } => Event::AccountData {
+				request,
+				result: self.account_data(section).await,
+			},
+			Command::Soundboard(command) => Event::Soundboard(match command {
+				client_core::soundboard::Command::Settings { request } => {
+					client_core::soundboard::Event::Settings {
+						request,
+						result: self.soundboard_settings().await,
+					}
+				}
+				client_core::soundboard::Command::Save { edit, request } => {
+					client_core::soundboard::Event::Settings {
+						request,
+						result: self.set_soundboard(edit).await,
+					}
+				}
+				client_core::soundboard::Command::Sounds { guild } => {
+					client_core::soundboard::Event::Sounds {
+						guild,
+						result: self.soundboard_sounds(guild).await,
+					}
+				}
+				client_core::soundboard::Command::Send {
+					channel,
+					sound,
+					source_guild,
+				} => client_core::soundboard::Event::Sent {
+					result: self
+						.send_soundboard_sound(channel, sound, source_guild)
+						.await,
+				},
+			}),
 			Command::Pins {
 				channel,
 				before,
@@ -1852,6 +1899,27 @@ impl DiscordApi {
 					result,
 				}
 			}
+			Command::UploadStreamPreview {
+				guild,
+				channel,
+				user,
+				jpeg,
+			} => Event::StreamPreviewUploaded(
+				match discord_protocol::stream::thumbnail_body(&jpeg) {
+					Some(body) => {
+						let key = discord_protocol::stream::own_key(guild, channel, user);
+						self.request_limited(
+							Method::POST,
+							&format!("/streams/{key}/preview"),
+							Some(body),
+							4096,
+						)
+						.await
+						.map(|_| ())
+					}
+					None => Err(Failure::Protocol),
+				},
+			),
 			Command::EditProfile {
 				user,
 				request,

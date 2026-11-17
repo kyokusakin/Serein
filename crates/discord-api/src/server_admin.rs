@@ -9,8 +9,14 @@ use serde_json::json;
 use wreq::Method;
 
 impl DiscordApi {
-	pub(super) async fn server_admin(&self, guild: Id, request: u64, action: &Action) -> Event {
-		let result = self.server_admin_action(guild, action).await;
+	pub(super) async fn server_admin(
+		&self,
+		guild: Id,
+		request: u64,
+		action: &Action,
+		account: Option<Id>,
+	) -> Event {
+		let result = self.server_admin_action(guild, action, account).await;
 		Event {
 			guild,
 			request,
@@ -64,7 +70,12 @@ impl DiscordApi {
 			.await?;
 		wire::member(&bytes, user).map_err(|_| Failure::Protocol)
 	}
-	async fn server_admin_action(&self, guild: Id, action: &Action) -> Result<Outcome, Failure> {
+	async fn server_admin_action(
+		&self,
+		guild: Id,
+		action: &Action,
+		account: Option<Id>,
+	) -> Result<Outcome, Failure> {
 		if guild.0 == 0 || !action.valid() {
 			return Err(Failure::Protocol);
 		}
@@ -75,6 +86,7 @@ impl DiscordApi {
 						json!({"channel_id":channel.map(|id| id.to_string())})
 					}
 					VoiceChange::Mute(muted) => json!({"mute":muted}),
+					VoiceChange::Deafen(deafened) => json!({"deaf":deafened}),
 				};
 				let bytes = self
 					.request_limited(
@@ -91,6 +103,7 @@ impl DiscordApi {
 					.as_str()
 					.and_then(|id| id.parse::<u64>().ok())
 					!= Some(user.0) || matches!(change, VoiceChange::Mute(muted) if member["mute"].as_bool() != Some(*muted))
+					|| matches!(change, VoiceChange::Deafen(deafened) if member["deaf"].as_bool() != Some(*deafened))
 				{
 					return Err(Failure::Ambiguous);
 				}
@@ -297,10 +310,15 @@ impl DiscordApi {
 				Ok(Outcome::Member(member))
 			}
 			Action::SetNickname { user, nick } => {
+				let path = if account == Some(*user) {
+					format!("/guilds/{guild}/members/@me")
+				} else {
+					format!("/guilds/{guild}/members/{user}")
+				};
 				let bytes = self
 					.request_limited(
 						Method::PATCH,
-						&format!("/guilds/{guild}/members/{user}"),
+						&path,
 						Some(json!({"nick":if nick.is_empty() { None } else { Some(nick) }})),
 						64 * 1024,
 					)
@@ -511,7 +529,7 @@ mod sticker_tests {
 	use super::*;
 
 	#[tokio::test]
-	async fn voice_moderation_http_sends_only_requested_member_change() {
+	async fn member_writes_send_only_the_requested_change_on_the_right_route() {
 		use crate::SessionSecret;
 		use std::{sync::Arc, time::Duration};
 		use tokio::{
@@ -526,13 +544,28 @@ mod sticker_tests {
 			.unwrap();
 			api.base = format!("http://{}", listener.local_addr().unwrap());
 			let server = tokio::spawn(async move {
-				for (expected, reply) in [
-					(json!({"mute":true}), json!({"user":{"id":"7"},"mute":true})),
-					(json!({"channel_id":"4"}), json!({"user":{"id":"7"}})),
-					(json!({"channel_id":null}), json!({"user":{"id":"7"}})),
+				for (path, expected, reply) in [
 					(
+						"7",
+						json!({"mute":true}),
+						json!({"user":{"id":"7"},"mute":true}),
+					),
+					("7", json!({"channel_id":"4"}), json!({"user":{"id":"7"}})),
+					("7", json!({"channel_id":null}), json!({"user":{"id":"7"}})),
+					(
+						"7",
 						json!({"mute":false}),
 						json!({"user":{"id":"8"},"mute":false}),
+					),
+					(
+						"@me",
+						json!({"nick":"Self"}),
+						json!({"user":{"id":"7","username":"Own"},"nick":"Self","roles":[]}),
+					),
+					(
+						"8",
+						json!({"nick":null}),
+						json!({"user":{"id":"8","username":"Other"},"roles":[]}),
 					),
 				] {
 					let (mut stream, _) = listener.accept().await.unwrap();
@@ -548,7 +581,11 @@ mod sticker_tests {
 						}
 					};
 					let headers = std::str::from_utf8(&bytes[..end]).unwrap();
-					assert!(headers.starts_with("PATCH /guilds/2/members/7 HTTP/1.1\r\n"));
+					assert!(
+						headers
+							.starts_with(&format!("PATCH /guilds/2/members/{path} HTTP/1.1\r\n")),
+						"{headers}"
+					);
 					let length = headers
 						.lines()
 						.find_map(|line| {
@@ -594,7 +631,8 @@ mod sticker_tests {
 							user: Id(7),
 							channel: Id(3),
 							change
-						}
+						},
+						Some(Id(7)),
 					)
 					.await,
 					Ok(Outcome::VoiceUpdated(Id(7)))
@@ -607,11 +645,22 @@ mod sticker_tests {
 						user: Id(7),
 						channel: Id(3),
 						change: VoiceChange::Mute(false)
-					}
+					},
+					Some(Id(7)),
 				)
 				.await,
 				Err(Failure::Ambiguous)
 			));
+			for (user, nick) in [(Id(7), "Self"), (Id(8), "")] {
+				let action = Action::SetNickname {
+					user,
+					nick: nick.into(),
+				};
+				assert!(matches!(
+					api.server_admin_action(Id(2), &action, Some(Id(7))).await,
+					Ok(Outcome::Member(member)) if member.user.id == user
+				));
+			}
 			server.await.unwrap();
 		})
 		.await
@@ -700,6 +749,7 @@ mod sticker_tests {
 					user: Id(7),
 					seconds: Some(60),
 				},
+				None,
 			)
 			.await
 		});

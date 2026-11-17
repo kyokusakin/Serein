@@ -54,6 +54,9 @@ impl Settings {
 			show_hidden_channels: ui.show_hidden_channels,
 			hide_nitro_emojis: ui.hide_nitro_emojis,
 			convert_emoticons: ui.convert_emoticons,
+			developer_mode: ui.developer_mode,
+			streamer_mode: ui.streamer_mode,
+			persistent_verification_codes: ui.persistent_verification_codes,
 			hide_blocked_messages: ui.hide_blocked_messages,
 			hide_ignored_messages: ui.hide_ignored_messages,
 			preload_on_hover: ui.preload_on_hover,
@@ -84,6 +87,8 @@ impl Settings {
 			expanded_folders: ui.expanded_folders.clone(),
 			user_volumes: ui.voice_user_volume_overrides(),
 			muted_users: ui.voice_user_mutes().to_vec(),
+			soundboard_muted_users: ui.voice_soundboard_muted.clone(),
+			video_disabled_users: ui.voice_video_disabled.clone(),
 			cosmetics: ui.cosmetics,
 			image_cache: ui.image_cache,
 			time_format: ui.time_format,
@@ -111,6 +116,9 @@ impl Settings {
 		ui.show_hidden_channels = value.show_hidden_channels;
 		ui.hide_nitro_emojis = value.hide_nitro_emojis;
 		ui.convert_emoticons = value.convert_emoticons;
+		ui.developer_mode = value.developer_mode;
+		ui.streamer_mode = value.streamer_mode;
+		ui.persistent_verification_codes = value.persistent_verification_codes;
 		ui.hide_blocked_messages = value.hide_blocked_messages;
 		ui.hide_ignored_messages = value.hide_ignored_messages;
 		ui.preload_on_hover = value.preload_on_hover;
@@ -142,6 +150,10 @@ impl Settings {
 		ui.expanded_folders.clone_from(&value.expanded_folders);
 		ui.set_voice_user_volume_overrides(&value.user_volumes);
 		ui.set_voice_user_mutes(&value.muted_users);
+		ui.voice_soundboard_muted
+			.clone_from(&value.soundboard_muted_users);
+		ui.voice_video_disabled
+			.clone_from(&value.video_disabled_users);
 		ui.cosmetics = value.cosmetics;
 		ui.image_cache = value.image_cache;
 		ui.time_format = value.time_format;

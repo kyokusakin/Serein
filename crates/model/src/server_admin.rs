@@ -95,6 +95,7 @@ impl Query {
 pub enum VoiceChange {
 	Move(Option<Id>),
 	Mute(bool),
+	Deafen(bool),
 }
 #[derive(Clone)]
 pub enum Action {

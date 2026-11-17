@@ -143,7 +143,7 @@ fn current_game_can_be_renamed_and_running_programs_added() {
 }
 
 #[test]
-fn one_page_shares_activity_and_lists_detected_games_that_can_be_hidden() {
+fn registered_games_lists_detected_games_that_can_be_hidden() {
 	let ctx = egui::Context::default();
 	ui::design::apply(&ctx);
 	let mut state = test_support::demo_state();
@@ -152,7 +152,6 @@ fn one_page_shares_activity_and_lists_detected_games_that_can_be_hidden() {
 	let mut view = MessagingUi::default();
 	view.language = ui::i18n::Language::English;
 	view.share_game_activity = true;
-	view.discord_activity_sharing = Some(false);
 	let now = std::time::SystemTime::now()
 		.duration_since(std::time::UNIX_EPOCH)
 		.unwrap()
@@ -170,16 +169,13 @@ fn one_page_shares_activity_and_lists_detected_games_that_can_be_hidden() {
 		game("opt/manual/game", "Manual game", None, None),
 		game("opt/scanned/game", "Scanned game", Some(7), Some(now)),
 	];
-	// The former Game Activity search term still opens the merged page.
-	view.preview_settings("activity");
+	view.preview_settings("registered games");
 	let mut texts = Vec::new();
 	for _ in 0..3 {
 		texts = frame(&ctx, &mut view, &mut state, vec![]);
 	}
 	for label in [
 		"Registered Games",
-		"Share game activity",
-		"Enable on Discord",
 		"Current Game",
 		"Added Games",
 		"Scanned game",
@@ -189,7 +185,6 @@ fn one_page_shares_activity_and_lists_detected_games_that_can_be_hidden() {
 	] {
 		find(&texts, label);
 	}
-	assert!(texts.iter().all(|(text, _)| text != "Game Activity"));
 	// The most recently played game is listed first.
 	assert!(find(&texts, "Scanned game").y < find(&texts, "Manual game").y);
 

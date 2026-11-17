@@ -35,6 +35,19 @@ impl Request {
 							.is_none_or(|guild| Some(guild) == self.guild_id)
 						&& invocation.valid()
 				}
+				Data::Autocomplete {
+					invocation,
+					focused,
+				} => {
+					self.message_id.is_none()
+						&& self.message_flags == 0
+						&& self.application_id == invocation.command.application_id
+						&& invocation
+							.command
+							.guild_id
+							.is_none_or(|guild| Some(guild) == self.guild_id)
+						&& invocation.autocompletes(focused)
+				}
 				Data::Component {
 					custom_id,
 					component_type,
@@ -65,6 +78,11 @@ impl Request {
 pub enum Data {
 	ApplicationCommand {
 		invocation: Box<model::application_commands::Invocation>,
+	},
+	/// Suggestions for the option named `focused`, which carries the text typed so far.
+	Autocomplete {
+		invocation: Box<model::application_commands::Invocation>,
+		focused: String,
 	},
 	Component {
 		custom_id: String,
@@ -102,6 +120,10 @@ pub enum Event {
 		modal: Box<Modal>,
 	},
 	Ephemeral(Box<Message>),
+	Suggestions {
+		nonce: String,
+		choices: Vec<model::application_commands::Choice>,
+	},
 }
 impl Event {
 	pub fn bytes(&self) -> usize {
@@ -117,6 +139,21 @@ impl Event {
 					+ model::component_bytes(&modal.components)
 			}
 			Self::Ephemeral(m) => m.bytes(),
+			Self::Suggestions { nonce, choices } => {
+				nonce.capacity()
+					+ choices
+						.iter()
+						.map(|choice| {
+							size_of_val(choice)
+								+ choice.name.capacity() + match &choice.value {
+								model::application_commands::Value::String(value) => {
+									value.capacity()
+								}
+								_ => 0,
+							}
+						})
+						.sum::<usize>()
+			}
 		}
 	}
 }
@@ -138,6 +175,16 @@ pub struct Interactions {
 	modal_channel: Option<Id>,
 	// A success acknowledgement can precede the modal dispatch.
 	completed: Option<Pending>,
+	pub suggestions: Option<Suggestions>,
+}
+/// The latest autocomplete request; it never blocks running a command.
+pub struct Suggestions {
+	nonce: String,
+	pub command: Id,
+	pub option: String,
+	pub text: String,
+	pub choices: Vec<model::application_commands::Choice>,
+	pub loading: bool,
 }
 impl Interactions {
 	pub fn busy(&self) -> bool {
@@ -150,6 +197,7 @@ impl Interactions {
 		self.modal_channel = None;
 		self.ephemeral.clear();
 		self.error = None;
+		self.suggestions = None;
 	}
 }
 fn valid_values(c: &Component, values: &[String], required: bool) -> bool {
@@ -285,15 +333,7 @@ impl State {
 	) -> Option<Command> {
 		let channel_id = self.selected?;
 		let guild_id = self.channel(channel_id)?.guild;
-		self.interactions.sequence = self.interactions.sequence.wrapping_add(1);
-		let request = self.interactions.sequence;
-		let nonce = crate::fingerprint::nonce(
-			SystemTime::now()
-				.duration_since(UNIX_EPOCH)
-				.unwrap_or_default()
-				.as_millis(),
-			request,
-		);
+		let (request, nonce) = self.next_interaction();
 		self.interactions.pending = Some(Pending {
 			nonce: nonce.clone(),
 			channel: channel_id,
@@ -442,14 +482,31 @@ impl State {
 					self.interactions.error = None;
 				}
 			}
-			Event::Failed { nonce } => self.interaction_failed(
-				&nonce,
-				"The application could not complete this interaction",
-			),
+			Event::Failed { nonce } => {
+				self.suggestions_failed(&nonce);
+				self.interaction_failed(
+					&nonce,
+					"The application could not complete this interaction",
+				)
+			}
+			Event::Suggestions { nonce, choices } => {
+				if let Some(suggestions) = &mut self.interactions.suggestions
+					&& suggestions.nonce == nonce
+				{
+					suggestions.loading = false;
+					suggestions.choices =
+						if model::application_commands::valid_suggestions(&choices) {
+							choices
+						} else {
+							Vec::new()
+						};
+				}
+			}
 			Event::Submitted {
 				nonce,
 				result: Err(failure),
 			} => {
+				self.suggestions_failed(&nonce);
 				self.interaction_failed(&nonce, failure.label());
 				if failure.ends_session() {
 					self.fail(failure);
@@ -468,6 +525,90 @@ impl State {
 		}
 		self.revision = self.revision.wrapping_add(1);
 		Ok(())
+	}
+	fn next_interaction(&mut self) -> (u64, String) {
+		self.interactions.sequence = self.interactions.sequence.wrapping_add(1);
+		let request = self.interactions.sequence;
+		let nonce = crate::fingerprint::nonce(
+			SystemTime::now()
+				.duration_since(UNIX_EPOCH)
+				.unwrap_or_default()
+				.as_millis(),
+			request,
+		);
+		(request, nonce)
+	}
+	/// Asks the command's application for suggestions for `focused` in the selected channel.
+	/// Repeating the latest request sends nothing.
+	pub fn request_suggestions(
+		&mut self,
+		command_id: Id,
+		path: &[String],
+		values: &[(String, String)],
+		focused: &str,
+	) -> Option<Command> {
+		let channel_id = self.selected?;
+		let text = values
+			.iter()
+			.find(|(name, _)| name == focused)
+			.map_or("", |(_, text)| text.as_str());
+		if self
+			.interactions
+			.suggestions
+			.as_ref()
+			.is_some_and(|s| s.command == command_id && s.option == focused && s.text == text)
+			|| !self.can_request_application_commands(channel_id)
+			|| !self.interactions_allowed()
+			|| !self.application_commands_cover(channel_id)
+		{
+			return None;
+		}
+		let command = self
+			.application_commands
+			.commands
+			.iter()
+			.find(|c| c.id == command_id)
+			.filter(|c| self.can_use_application_command(channel_id, c))?;
+		let invocation = command.autocomplete(path, values, focused).ok()?;
+		let application_id = command.application_id;
+		let guild_id = self.channel(channel_id)?.guild;
+		let (request, nonce) = self.next_interaction();
+		let choices = self
+			.interactions
+			.suggestions
+			.take()
+			.filter(|s| s.command == command_id && s.option == focused)
+			.map(|s| s.choices)
+			.unwrap_or_default();
+		self.interactions.suggestions = Some(Suggestions {
+			nonce: nonce.clone(),
+			command: command_id,
+			option: focused.to_owned(),
+			text: text.to_owned(),
+			choices,
+			loading: true,
+		});
+		Some(Command::Interaction(Request {
+			request,
+			nonce,
+			application_id,
+			channel_id,
+			guild_id,
+			message_id: None,
+			message_flags: 0,
+			data: Data::Autocomplete {
+				invocation: Box::new(invocation),
+				focused: focused.to_owned(),
+			},
+		}))
+	}
+	fn suggestions_failed(&mut self, nonce: &str) {
+		if let Some(suggestions) = &mut self.interactions.suggestions
+			&& suggestions.nonce == nonce
+		{
+			suggestions.loading = false;
+			suggestions.choices.clear();
+		}
 	}
 	fn interaction_failed(&mut self, nonce: &str, error: &'static str) {
 		if self

@@ -740,4 +740,115 @@ mod tests {
 		);
 		assert!(state.request_application_commands(Id(3), true).is_some());
 	}
+	#[test]
+	fn suggestions_follow_only_the_latest_request_and_never_block_running() {
+		let mut state = bot_state();
+		let Some(Command::ApplicationCommands {
+			channel, request, ..
+		}) = state.request_application_commands(Id(2), false)
+		else {
+			panic!()
+		};
+		let mut command = command();
+		command.options[0].options = vec![
+			schema::CommandOption {
+				kind: 3,
+				name: "city".into(),
+				description: "City".into(),
+				required: true,
+				autocomplete: true,
+				..Default::default()
+			},
+			schema::CommandOption {
+				kind: 4,
+				name: "days".into(),
+				description: "Days".into(),
+				..Default::default()
+			},
+		];
+		let generation = state.generation;
+		state.apply(Envelope {
+			generation,
+			event: Event::ApplicationCommands {
+				channel,
+				request,
+				result: Ok(vec![command]),
+			},
+		});
+		let path = ["run".to_owned()];
+		let typed = |city: &str| {
+			vec![
+				("city".to_owned(), city.to_owned()),
+				("days".to_owned(), "x".to_owned()),
+			]
+		};
+		let ask = |state: &mut State, city, focused| match state.request_suggestions(
+			Id(4),
+			&path,
+			&typed(city),
+			focused,
+		) {
+			Some(Command::Interaction(request)) => Some(request),
+			_ => None,
+		};
+		let first = ask(&mut state, "Pa", "city").expect("typing asks for suggestions");
+		assert!(first.valid());
+		let interactions::Data::Autocomplete { invocation, .. } = &first.data else {
+			panic!()
+		};
+		assert_eq!(
+			invocation.options[0].options.len(),
+			1,
+			"unparseable values stay out"
+		);
+		assert!(ask(&mut state, "Pa", "city").is_none());
+		assert!(ask(&mut state, "Pa", "days").is_none());
+		let second = ask(&mut state, "Par", "city").unwrap();
+		let suggest = |state: &mut State, nonce: &str, name: &str| {
+			state.apply(Envelope {
+				generation,
+				event: Event::Interaction(interactions::Event::Suggestions {
+					nonce: nonce.into(),
+					choices: vec![schema::Choice {
+						name: name.into(),
+						value: schema::Value::String(name.into()),
+					}],
+				}),
+			})
+		};
+		suggest(&mut state, &first.nonce, "Pale");
+		assert!(state.interactions.suggestions.as_ref().unwrap().loading);
+		suggest(&mut state, &second.nonce, "Paris");
+		let suggestions = state.interactions.suggestions.as_ref().unwrap();
+		assert!(!suggestions.loading && suggestions.choices[0].name == "Paris");
+		assert!(!state.interactions.busy());
+		let third = ask(&mut state, "Pari", "city").unwrap();
+		assert_eq!(
+			state
+				.interactions
+				.suggestions
+				.as_ref()
+				.unwrap()
+				.choices
+				.len(),
+			1,
+			"earlier suggestions stay while the next ones load"
+		);
+		state.apply(Envelope {
+			generation,
+			event: Event::Interaction(interactions::Event::Submitted {
+				nonce: third.nonce,
+				result: Err(crate::auth::Failure::Network),
+			}),
+		});
+		assert!(
+			state
+				.interactions
+				.suggestions
+				.as_ref()
+				.unwrap()
+				.choices
+				.is_empty()
+		);
+	}
 }

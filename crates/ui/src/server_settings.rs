@@ -300,6 +300,41 @@ impl MessagingUi {
 			.map(|(generation, guild)| (generation, guild, editor.icon_request))
 	}
 
+	/// A webhook editor in server or channel settings asked for an avatar picker.
+	pub fn take_webhook_avatar_request(&mut self, generation: u64) -> Option<(u64, Id, u64)> {
+		let request = self.server_icon_sequence.wrapping_add(1);
+		let guild = match self.server_settings.scope {
+			Some((scope, guild))
+				if scope == generation
+					&& self
+						.server_settings
+						.integrations
+						.take_avatar_request(request) =>
+			{
+				Some(guild)
+			}
+			_ => self.channel_menu.take_webhook_avatar_request(request),
+		}?;
+		self.server_icon_sequence = request;
+		Some((generation, guild, request))
+	}
+	pub fn accept_webhook_avatar(
+		&mut self,
+		ctx: &egui::Context,
+		scope: (u64, Id, u64),
+		result: Result<Option<(String, egui::ColorImage)>, &'static str>,
+	) {
+		if self.server_settings.scope == Some((scope.0, scope.1))
+			&& self.server_settings.integrations.waits_for_avatar(scope.2)
+		{
+			self.server_settings
+				.integrations
+				.accept_avatar(ctx, scope.2, result);
+		} else {
+			self.channel_menu
+				.accept_webhook_avatar(ctx, scope.1, scope.2, result);
+		}
+	}
 	pub fn accept_server_icon(
 		&mut self,
 		ctx: &egui::Context,
@@ -328,7 +363,7 @@ impl MessagingUi {
 				));
 				editor.icon_error = None;
 			}
-			Ok(Some(_)) => editor.icon_error = Some("The prepared icon is too large."),
+			Ok(Some(_)) => editor.icon_error = Some("server-settings-error-icon-too-large"),
 			Ok(None) => {}
 			Err(error) => editor.icon_error = Some(error),
 		}
@@ -558,18 +593,16 @@ impl Editor {
 				state.server_settings.saving || state.server_admin.saving || self.invites.busy();
 			let mut confirmation = dialog::Confirm::new(
 				"discard-server-settings",
-				"Discard unsaved changes?",
-				"Your changes to this server will be lost.",
+				"server-settings-discard-title",
+				"server-settings-discard-message",
 			)
 			.danger()
-			.confirm_label("Discard Changes")
-			.cancel_label("Keep Editing")
+			.confirm_label("channel-menu-discard-confirm")
+			.cancel_label("channel-menu-discard-keep")
 			.enabled(!busy);
 			if busy {
-				confirmation = confirmation.note(
-					dialog::Level::Info,
-					"Wait for the current save to finish before closing.",
-				);
+				confirmation =
+					confirmation.note(dialog::Level::Info, "server-settings-discard-wait");
 			}
 			match confirmation.show(ctx) {
 				Some(dialog::Choice::Confirmed) => {
@@ -941,9 +974,7 @@ impl Editor {
 			}
 			edit.icon = self.icon.clone();
 			if !edit.valid() {
-				self.form_error = Some(
-					"Use a server name of 2–100 characters, a description of up to 300 characters, and valid traits without control characters.",
-				);
+				self.form_error = Some("server-settings-error-invalid");
 				return;
 			}
 			if let Some(command) = state.save_server_settings(edit) {
@@ -951,9 +982,7 @@ impl Editor {
 				self.submitted = true;
 				self.form_error = None;
 			} else {
-				self.form_error = Some(
-					"Could not save these changes. Check the selected channels, reconnect, or reload the server settings and try again.",
-				);
+				self.form_error = Some("server-settings-error-save");
 			}
 		}
 		if state.server_settings.needs_refresh {
@@ -1646,7 +1675,10 @@ fn banner_swatch(
 			Color32::WHITE,
 		);
 	}
-	let name = format!("Banner color #{color:06X}");
+	let name = crate::i18n::translate_args(
+		"server-settings-banner-color",
+		&[("color", &format!("#{color:06X}"))],
+	);
 	response.widget_info(|| {
 		egui::WidgetInfo::selected(egui::Role::RadioButton, ui.is_enabled(), selected, &name)
 	});

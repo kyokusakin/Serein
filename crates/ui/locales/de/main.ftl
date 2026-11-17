@@ -1,48 +1,26 @@
 # de application translations. Edit with Weblate or any Fluent editor.
 
 language-system = System
-language-group = Sprache
 language-label = Anzeigesprache
-language-description = Wählen Sie Sereins Sprache. Discord-Inhalte werden niemals übersetzt.
-section-user = Benutzereinstellungen
-section-app = App-Einstellungen
-section-customization = Anpassung
+language-description = Wähle die Sprache, in der Serein angezeigt wird.
 page-account = Mein Konto
 page-profile = Profil
 page-general = Allgemein
 page-appearance = Aussehen
-page-chat = Chatten
 page-messaging-permissions = Nachrichtenberechtigungen
 page-notifications = Benachrichtigungen
 page-registered-games = Registrierte Spiele
 page-voice = Sprache und Video
-page-keybinds = Tastenkombinationen
 page-storage = Daten & Datenschutz
 page-updates = Aktualisierungen
 page-extensions = Erweiterungen
 page-themes = Themen
-description-account = Das Discord-Konto hat sich auf diesem Gerät angemeldet.
-description-profile = Wählen Sie, wie Sie auf Discord erscheinen.
-description-general = Start-, Fenster- und Grafikverhalten auf diesem Gerät.
-description-appearance = Thema, Farben, Fenstereffekte und Layout.
-description-chat = Wie sich Nachrichten, Medien, Links und Scrollen verhalten.
-description-messaging-permissions = Steuern Sie, wer Sie kontaktieren kann und wie Nachrichten gefiltert werden.
-description-notifications = Wählen Sie aus, welche Benachrichtigungen Sie erhalten und wie diese angezeigt werden.
-description-registered-games = Teile, was du spielst, und korrigiere oder ergänze die Spiele, die Serein erkennt.
-description-voice = Mikrofon, Lautsprecher, Kamera und Sprachverarbeitung.
-description-keybinds = Tastaturkürzel für Serein.
-description-storage = Was Serein auf diesem Gerät speichert.
-description-updates = Halten Sie Serein auf diesem Gerät auf dem neuesten Stand.
-description-extensions = Community-Plugins verwalten.
-description-themes = Wählen Sie ein Community-Thema.
 theme-maker = Theme-Ersteller
-theme-maker-description = Machen Sie es zu Ihrem. Sehen Sie sich Änderungen in Ihren Gesprächen in der Vorschau an.
 search = Suchen
 no-settings-found = Keine Einstellungen gefunden
 search-suggestion = Probieren Sie Design, Benachrichtigungen, Sprache oder Cache aus.
 exit-preview = Vorschau beenden
 log-out = Abmelden
-unofficial = Inoffiziell · nicht von Discord unterstützt
 offline-preview = Offline-Vorschau · Änderungen bleiben in dieser Sitzung und werden nie gesendet.
 general-startup = Start-up
 general-open-at-startup = Öffnen Sie Serein, wenn Ihr Computer startet
@@ -1498,7 +1476,7 @@ join-server-body-choose-join-server-to-confirm = Wählen Sie zur Bestätigung �
 # Context: body
 join-server-body-don-t-have-an-invite = Sie haben keine Einladung?
 # Context: body
-join-server-body-explore-discoverable-communities-in-discord = Entdecken Sie auffindbare Communities in Discord ↗
+join-server-body-explore-discoverable-communities-in-discord = Entdecken Sie auffindbare Communities in Discord
 # Context: body
 join-server-body-fetching-server-details = Serverdetails werden abgerufen…
 # Context: body
@@ -4890,7 +4868,6 @@ badges-hide-levels = Stufen ausblenden
 # Context: badges
 badges-manage = Abzeichen verwalten
 page-language-time = Sprache & Zeit
-description-language-time = Anzeigesprache und Darstellung der Uhrzeit.
 time-format-group = Zeitformat
 time-format-auto = Automatisch
 time-format-12-hour = 12-Stunden

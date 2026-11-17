@@ -481,6 +481,39 @@ impl MessagingUi {
 						if response.clicked() {
 							self.join_server.open_picker(state.generation);
 						}
+						let (rect, response) = ui.allocate_exact_size(
+							egui::Vec2::splat(RAIL_TILE),
+							egui::Sense::click(),
+						);
+						let hovered =
+							response.hovered() || response.has_focus() || state.discovery.open;
+						ui.painter().rect_filled(
+							rect,
+							14,
+							if hovered {
+								colors.positive
+							} else {
+								colors.raised
+							},
+						);
+						crate::icons::paint(
+							ui.painter(),
+							crate::icons::Icon::Compass,
+							rect.shrink(10.0),
+							if hovered {
+								colors.accent_text
+							} else {
+								colors.positive
+							},
+						);
+						let label = crate::i18n::translate("discovery-title");
+						response.widget_info(|| {
+							egui::WidgetInfo::labeled(egui::Role::Button, true, &label)
+						});
+						design::rail_name(&response, &label);
+						if response.clicked() {
+							self.discovery.request(state);
+						}
 					});
 			});
 		if let Some(id) = selected

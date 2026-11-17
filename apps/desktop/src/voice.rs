@@ -145,6 +145,7 @@ enum Notice {
 	MediaReady(String),
 	DeviceReady,
 	RemoteAudio,
+	VerificationCode(Id, Option<String>),
 }
 struct Live {
 	generation: u64,
@@ -386,6 +387,8 @@ pub struct Voice {
 	/// Media dropped and a rejoin is scheduled: the main gateway may have died with it, so the
 	/// app should confirm that socket before the rejoin depends on it.
 	pub gateway_check: bool,
+	/// This account's kept encryption identity; calls without one get a fresh identity.
+	pub kept_identity: Option<std::sync::Arc<discord_voice::Identity>>,
 }
 impl Voice {
 	pub fn stop(&mut self) {
@@ -980,7 +983,7 @@ impl Voice {
 		if !state.demo {
 			ui.voice_latency = ui::VoiceLatency::default();
 		}
-		if std::mem::take(&mut self.leave_cue) && ui.notification_options.allows(Sound::UserLeave) {
+		if std::mem::take(&mut self.leave_cue) && ui.sound_options().allows(Sound::UserLeave) {
 			ui.notification_preview = Some(Sound::UserLeave);
 			ctx.request_repaint();
 		}
@@ -1076,7 +1079,7 @@ impl Voice {
 				.live
 				.as_ref()
 				.is_some_and(|live| live.cues.joined && live.generation == state.generation)
-				&& ui.notification_options.allows(Sound::UserLeave)
+				&& ui.sound_options().allows(Sound::UserLeave)
 			{
 				ui.notification_preview = Some(Sound::UserLeave);
 				ctx.request_repaint();
@@ -1181,12 +1184,14 @@ impl Voice {
 				.effective()
 				.sensitivity_db
 				.unwrap_or(-70);
+			let verify = ui.voice_verify.map_or(0, |user| user.0);
 			live.controls.send_if_modified(|control| {
 				if control.muted == muted
 					&& control.deafened == deafened
 					&& control.user_volumes == user_volumes
 					&& control.stream_volume == stream_volume
 					&& control.activity_threshold_db == activity_threshold_db
+					&& control.verify == verify
 				{
 					false
 				} else {
@@ -1195,6 +1200,7 @@ impl Voice {
 					control.user_volumes = user_volumes;
 					control.stream_volume = stream_volume;
 					control.activity_threshold_db = activity_threshold_db;
+					control.verify = verify;
 					true
 				}
 			});
@@ -1254,6 +1260,11 @@ impl Voice {
 							live.negotiation.is_none(),
 							live.media_ready,
 						));
+					}
+					Notice::VerificationCode(user, code) => {
+						if ui.voice_verify == Some(user) {
+							ui.voice_verification_code = Some((user, code));
+						}
 					}
 					// Notices wake the UI; only the current device configuration can be ready.
 					Notice::DeviceReady | Notice::RemoteAudio => {}
@@ -1339,7 +1350,7 @@ impl Voice {
 					state.gateway_connected,
 					live.user,
 					&call.participants,
-				) && ui.notification_options.allows(cue)
+				) && ui.sound_options().allows(cue)
 				{
 					ui.notification_preview = Some(cue);
 					ctx.request_repaint();
@@ -1863,7 +1874,7 @@ impl Voice {
 				ui.voice_camera_preview =
 					Some(ctx.load_texture("local-camera", image, egui::TextureOptions::LINEAR));
 				let cue = model::notification_preferences::Sound::CameraOn;
-				if ui.notification_options.allows(cue) {
+				if ui.sound_options().allows(cue) {
 					ui.notification_preview = Some(cue);
 					ctx.request_repaint();
 				}
@@ -1927,6 +1938,7 @@ impl Voice {
 			deafened: false,
 			user_volumes: ui.voice_user_volumes(),
 			stream_volume: ui.voice_stream_volume(),
+			verify: 0,
 		});
 		let remote_video: Arc<std::sync::Mutex<RemotePictures>> =
 			Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -1970,7 +1982,10 @@ impl Voice {
 			token,
 			endpoint,
 		};
-		let identity = discord_voice::Identity::generate();
+		let identity = self
+			.kept_identity
+			.clone()
+			.unwrap_or_else(discord_voice::Identity::generate);
 		let media_identity = identity.clone();
 		let transport_failure = failure.clone();
 		let wake = ctx.clone();
@@ -2004,6 +2019,12 @@ impl Voice {
 							Notice::MediaReady(privacy_code)
 						}
 						Status::RemoteAudio => Notice::RemoteAudio,
+						Status::VerificationCode { user, code } => {
+							if code.as_ref().is_some_and(|code| code.len() > 64) {
+								return Err(());
+							}
+							Notice::VerificationCode(Id(user), code)
+						}
 						Status::Latency(sample) => {
 							if let Some(sample) = sample {
 								latency_send.send_modify(|latency| latency.push(sample));

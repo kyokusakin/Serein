@@ -25,7 +25,12 @@ const PROCESS_ROW: f32 = 40.0;
 impl MessagingUi {
 	pub(super) fn registered_games_settings(&mut self, ui: &mut egui::Ui, demo: bool) {
 		let p = design::palette(ui);
-		heading(ui, "settings-activity-current-game");
+		crate::settings::section_heading(
+			ui,
+			&mut self.settings.sections,
+			0,
+			&tr("settings-activity-current-game"),
+		);
 		ui.add_space(4.0);
 		let running = self.running_game.clone();
 		design::card(ui, |ui| {
@@ -115,7 +120,12 @@ impl MessagingUi {
 			});
 		});
 		design::divider(ui);
-		heading(ui, "settings-activity-added-games");
+		crate::settings::section_heading(
+			ui,
+			&mut self.settings.sections,
+			1,
+			&tr("settings-activity-added-games"),
+		);
 		if self.registered_games.is_empty() {
 			ui.label(
 				RichText::new(tr("settings-activity-no-games-added"))
@@ -393,11 +403,6 @@ impl MessagingUi {
 			}
 		}
 	}
-}
-
-fn heading(ui: &mut egui::Ui, key: &str) {
-	let p = design::palette(ui);
-	ui.label(design::medium(ui, tr(key), 22.0).color(p.text_strong));
 }
 
 /// How an entry got here and when it last ran: "Detected · Last played today".

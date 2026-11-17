@@ -159,9 +159,10 @@ navigation; the timeline centers and briefly highlights the exact target.
 `--features demo -- --demo --demo-message-links` exercises these states with an offline
 fixture; `--demo-light` selects the light appearance.
 
-Icons are [Phosphor Icons](https://phosphoricons.com) 2.1.1 (MIT) in the fill/bold weights,
-rasterized once into `assets/icons/atlas.png` (37 white glyphs in 64px cells) and tinted at
-draw time by `crates/ui/src/icons.rs`; there is no icon font. Standard icon buttons use a 70%
+Interface icons are Discord's own glyphs, with Phosphor Icons 2.1.1 (MIT) for third-party brand
+logos, file types and a few glyphs Discord has no counterpart for. All are rasterized once into
+`assets/icons/atlas.png` (white glyphs in 64px cells) and tinted at draw time by
+`crates/ui/src/icons.rs`; there is no icon font. Standard icon buttons use a 70%
 glyph/hitbox ratio (20px on a 28px button), quick reactions use 22px idle/24px hovered glyphs,
 and Delete uses its semantic danger color. `style.icon_size` scales shared glyphs by a bounded
 16–24px baseline without resizing hit regions. Provenance and the regeneration command are in

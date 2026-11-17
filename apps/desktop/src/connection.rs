@@ -475,6 +475,7 @@ impl Connection {
                 let mut reaction_read:Option<AbortTask>=None;
                 // A thread card's preview is a passive read; it must never wait behind sends.
                 let mut thread_preview:Option<AbortTask>=None;
+                let mut scheduled_events:Option<AbortTask>=None;let mut discovery:Option<AbortTask>=None;let mut account_data:Option<AbortTask>=None;
                 let mut ringing:Option<AbortTask>=None;
                 let mut recipient_ringing:Option<(client_core::voice::Command,AbortTask)>=None;
                 let mut upload:Option<AbortTask>=None;
@@ -652,6 +653,42 @@ impl Connection {
                                 reaction_read=Some(AbortTask(tokio::spawn(async move {
                                     let event=api.execute(command).await;
                                     let failure=match &event {Event::Reactions(client_core::reactions::Event::Read{result:Err(f),..}) if f.ends_session()=>Some(*f),_=>None};
+                                    let error=emit(event).err().or(failure);
+                                    if let Some(error)=error {api.stop_with(error);publish_terminal(&finished, api.stop_reason().unwrap_or(error));}
+                                    wake.request_repaint();
+                                })));
+                                continue;
+                            }
+                            if matches!(command,Command::AccountData{..}) {
+                                drop(account_data.take());
+                                let api=api.clone();let emit=emit.clone();let finished=finished.clone();let wake=wake.clone();
+                                account_data=Some(AbortTask(tokio::spawn(async move {
+                                    let event=api.execute(command).await;
+                                    let failure=match &event {Event::AccountData{result:Err(f),..} if f.ends_session() && *f!=Failure::Capacity=>Some(*f),_=>None};
+                                    let error=emit(event).err().or(failure);
+                                    if let Some(error)=error {api.stop_with(error);publish_terminal(&finished, api.stop_reason().unwrap_or(error));}
+                                    wake.request_repaint();
+                                })));
+                                continue;
+                            }
+                            if matches!(command,Command::Discovery{..}) {
+                                drop(discovery.take());
+                                let api=api.clone();let emit=emit.clone();let finished=finished.clone();let wake=wake.clone();
+                                discovery=Some(AbortTask(tokio::spawn(async move {
+                                    let event=api.execute(command).await;
+                                    let failure=match &event {Event::Discovery{result:Err(f),..} if f.ends_session() && *f!=Failure::Capacity=>Some(*f),_=>None};
+                                    let error=emit(event).err().or(failure);
+                                    if let Some(error)=error {api.stop_with(error);publish_terminal(&finished, api.stop_reason().unwrap_or(error));}
+                                    wake.request_repaint();
+                                })));
+                                continue;
+                            }
+                            if matches!(command,Command::ScheduledEvents{..}) {
+                                drop(scheduled_events.take());
+                                let api=api.clone();let emit=emit.clone();let finished=finished.clone();let wake=wake.clone();
+                                scheduled_events=Some(AbortTask(tokio::spawn(async move {
+                                    let event=api.execute(command).await;
+                                    let failure=match &event {Event::ScheduledEvents{result:Err(f),..} if f.ends_session() && *f!=Failure::Capacity=>Some(*f),_=>None};
                                     let error=emit(event).err().or(failure);
                                     if let Some(error)=error {api.stop_with(error);publish_terminal(&finished, api.stop_reason().unwrap_or(error));}
                                     wake.request_repaint();

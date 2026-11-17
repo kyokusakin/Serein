@@ -11,6 +11,19 @@ pub(crate) enum Action {
 	/// A member's voice channel invite: join the call there.
 	JoinVoice(model::Id),
 }
+/// An invite link or code as shown on screen: Streamer Mode masks the code, never the copy.
+pub(crate) fn shown(link: &str) -> String {
+	if !crate::streamer_mode().hides_invites() {
+		return link.to_owned();
+	}
+	let (base, code) = link.rsplit_once('/').unwrap_or(("", link));
+	let mask = "\u{2022}".repeat(code.chars().count().clamp(4, 16));
+	if base.is_empty() {
+		mask
+	} else {
+		format!("{base}/{mask}")
+	}
+}
 fn code(raw: &str) -> Option<String> {
 	let normalized;
 	let raw = if raw.starts_with("discord.gg/") || raw.starts_with("discord.com/invite/") {

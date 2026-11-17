@@ -1,7 +1,7 @@
 use crate::{DiscordApi, Failure};
 use discord_protocol::server_integrations as wire;
 use model::{
-	Id,
+	Id, Patch,
 	server_integrations::{Action, Snapshot},
 };
 use serde_json::json;
@@ -110,13 +110,19 @@ impl DiscordApi {
 					.integration_snapshot(guild, *integrations, *webhooks, scope)
 					.await;
 			}
-			Action::CreateWebhook { channel, name, .. } => {
+			Action::CreateWebhook {
+				channel,
+				name,
+				avatar,
+				..
+			} => {
+				let body = webhook_body(name, None, avatar)?;
 				self.integration_channel(guild, *channel).await?;
 				let bytes = self
 					.request_limited(
 						Method::POST,
 						&format!("/channels/{channel}/webhooks"),
-						Some(json!({"name":name})),
+						Some(body),
 						64 * 1024,
 					)
 					.await
@@ -125,6 +131,7 @@ impl DiscordApi {
 				if value.kind != 1
 					|| value.channel != Some(*channel)
 					|| value.name.as_ref() != Some(name)
+					|| !avatar_saved(avatar, value.avatar.as_ref())
 				{
 					return Err(Failure::Ambiguous);
 				}
@@ -134,8 +141,10 @@ impl DiscordApi {
 				webhook,
 				channel,
 				name,
+				avatar,
 				..
 			} => {
+				let body = webhook_body(name, Some(*channel), avatar)?;
 				let latest = self.integration_snapshot(guild, false, true, scope).await?;
 				let Some(current) = latest
 					.webhooks
@@ -152,7 +161,7 @@ impl DiscordApi {
 					.request_limited(
 						Method::PATCH,
 						&format!("/webhooks/{webhook}"),
-						Some(json!({"name":name,"channel_id":channel.to_string()})),
+						Some(body),
 						64 * 1024,
 					)
 					.await
@@ -162,6 +171,7 @@ impl DiscordApi {
 					|| value.kind != 1
 					|| value.channel != Some(*channel)
 					|| value.name.as_ref() != Some(name)
+					|| !avatar_saved(avatar, value.avatar.as_ref())
 				{
 					return Err(Failure::Ambiguous);
 				}
@@ -247,6 +257,35 @@ impl DiscordApi {
 		Ok(page)
 	}
 }
+/// Documented Create/Modify Webhook body; `avatar` is omitted when unchanged and null to remove it.
+fn webhook_body(
+	name: &str,
+	channel: Option<Id>,
+	avatar: &Patch<String>,
+) -> Result<serde_json::Value, Failure> {
+	let mut body = json!({ "name": name });
+	if let Some(channel) = channel {
+		body["channel_id"] = json!(channel.to_string());
+	}
+	match avatar {
+		Patch::Absent => {}
+		Patch::Null => body["avatar"] = serde_json::Value::Null,
+		Patch::Value(uri) => {
+			if !discord_protocol::group_actions::valid_icon_data_uri(uri) {
+				return Err(Failure::Protocol);
+			}
+			body["avatar"] = json!(uri);
+		}
+	}
+	Ok(body)
+}
+fn avatar_saved(avatar: &Patch<String>, saved: Option<&String>) -> bool {
+	match avatar {
+		Patch::Absent => true,
+		Patch::Null => saved.is_none(),
+		Patch::Value(_) => saved.is_some(),
+	}
+}
 fn write_failure(failure: Failure) -> Failure {
 	if failure == Failure::Capacity {
 		Failure::Ambiguous
@@ -309,7 +348,10 @@ mod tests {
 			api.base=format!("http://{}",listener.local_addr().unwrap());
 			let channel=json!({"id":"4","guild_id":"2","type":0});
 			let hook=json!({"id":"3","guild_id":"2","channel_id":"4","type":1,"name":"Builds","token":"SYNTHETIC_EXECUTION_SECRET"});
-			let edited=json!({"id":"3","guild_id":"2","channel_id":"4","type":1,"name":"Releases"});
+			let edited=json!({"id":"3","guild_id":"2","channel_id":"4","type":1,"name":"Releases","avatar":"0123456789abcdef0123456789abcdef"});
+			let mut png=b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec(); png.extend_from_slice(&[0,0,0,1,0,0,0,1]); png.resize(33,0);
+			let avatar=discord_protocol::group_actions::icon_data_uri(&png).unwrap();
+			let sent_avatar=avatar.clone();
 			let integration=json!({"id":"5","name":"Example","type":"discord","enabled":true});
 			let hook_path = if scope.is_some() {"/channels/4/webhooks"} else {"/guilds/2/webhooks"};
 			let server=tokio::spawn(async move {
@@ -321,7 +363,7 @@ mod tests {
 					("GET",hook_path,200,json!([hook.clone()]),None),
 					("GET",hook_path,200,json!([hook]),None),
 					("GET","/channels/4",200,channel,None),
-					("PATCH","/webhooks/3",200,edited.clone(),Some(json!({"name":"Releases","channel_id":"4"}))),
+					("PATCH","/webhooks/3",200,edited.clone(),Some(json!({"name":"Releases","channel_id":"4","avatar":sent_avatar}))),
 					("GET",hook_path,200,json!([edited.clone()]),None),
 					("GET",hook_path,200,json!([edited.clone()]),None),
 					("DELETE","/webhooks/3",204,serde_json::Value::Null,None),
@@ -349,12 +391,12 @@ mod tests {
 			});
 			let page=api.server_integration_action(Id(2),&Action::Load { channel: None,integrations:true,webhooks:false}).await.unwrap(); assert!(page.webhooks.is_none());
 			let page=api.server_integration_action(Id(2),&Action::Load {channel:scope,integrations:false,webhooks:true}).await.unwrap(); assert_eq!(page.channel,scope);
-			let page=api.server_integration_action(Id(2),&Action::CreateWebhook { scope,channel:Id(4),name:"Builds".into()}).await.unwrap(); assert_eq!(page.webhooks.unwrap()[0].id,Id(3));
-			let page=api.server_integration_action(Id(2),&Action::EditWebhook { scope,webhook:Id(3),channel:Id(4),name:"Releases".into()}).await.unwrap(); assert_eq!(page.webhooks.unwrap()[0].name.as_deref(),Some("Releases"));
+			let page=api.server_integration_action(Id(2),&Action::CreateWebhook { scope,channel:Id(4),name:"Builds".into(),avatar:Patch::Absent}).await.unwrap(); assert_eq!(page.webhooks.unwrap()[0].id,Id(3));
+			let page=api.server_integration_action(Id(2),&Action::EditWebhook { scope,webhook:Id(3),channel:Id(4),name:"Releases".into(),avatar:Patch::Value(avatar.clone())}).await.unwrap(); assert_eq!(page.webhooks.unwrap()[0].name.as_deref(),Some("Releases"));
 			assert!(api.server_integration_action(Id(2),&Action::DeleteWebhook { scope,webhook:Id(3)}).await.unwrap().webhooks.unwrap().is_empty());
 			assert!(api.server_integration_action(Id(2),&Action::DeleteIntegration {integration:Id(5)}).await.unwrap().integrations.unwrap().is_empty());
 			assert!(matches!(api.server_integration_action(Id(2),&Action::DeleteWebhook { scope,webhook:Id(3)}).await,Err(Failure::Ambiguous)));
-			let page=api.server_integration_action(Id(2),&Action::EditWebhook {scope:Some(Id(4)),webhook:Id(3),channel:Id(6),name:"Moved".into()}).await.unwrap(); assert_eq!(page.channel,Some(Id(4))); assert!(page.webhooks.unwrap().is_empty());
+			let page=api.server_integration_action(Id(2),&Action::EditWebhook {scope:Some(Id(4)),webhook:Id(3),channel:Id(6),name:"Moved".into(),avatar:Patch::Absent}).await.unwrap(); assert_eq!(page.channel,Some(Id(4))); assert!(page.webhooks.unwrap().is_empty());
 			assert!(api.server_integration_action(Id(2),&Action::Load {channel:Some(Id(4)),integrations:false,webhooks:true}).await.is_err());
 			server.await.unwrap();
 		}).await.unwrap();

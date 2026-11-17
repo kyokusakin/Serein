@@ -282,6 +282,14 @@ impl<'a> Field<'a> {
 			Err(DecodeError)
 		}
 	}
+	pub(crate) fn float(&self) -> Result<f32, DecodeError> {
+		if self.wire_type == 5 && self.value.len() == 4 {
+			let bytes: [u8; 4] = self.value.try_into().map_err(|_| DecodeError)?;
+			Ok(f32::from_le_bytes(bytes))
+		} else {
+			Err(DecodeError)
+		}
+	}
 }
 pub(crate) fn varint(input: &mut &[u8]) -> Result<u64, DecodeError> {
 	let mut value = 0;
@@ -357,6 +365,10 @@ pub(crate) fn integer_wrapper(number: u64, value: u64, output: &mut Vec<u8>) {
 }
 pub(crate) fn fixed64_field(number: u64, value: u64, output: &mut Vec<u8>) {
 	write_varint(number << 3 | 1, output);
+	output.extend_from_slice(&value.to_le_bytes());
+}
+pub(crate) fn float_field(number: u64, value: f32, output: &mut Vec<u8>) {
+	write_varint(number << 3 | 5, output);
 	output.extend_from_slice(&value.to_le_bytes());
 }
 
